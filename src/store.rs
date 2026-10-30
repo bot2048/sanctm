@@ -53,6 +53,17 @@ pub struct Profile {
     /// The slot was removed (its key forgotten). Never loaded again.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub removed: bool,
+    /// Where this account last saved a picture copy, offered again as one tap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_save: Option<SavePlace>,
+}
+
+/// A folder a picture copy was saved to: the place ("user", "airlock", "usb") and the folder
+/// in it, as the file browser returned it.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SavePlace {
+    pub place: String,
+    pub dir: String,
 }
 
 /// One account in the registry.

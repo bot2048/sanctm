@@ -11,11 +11,12 @@ component SaveOption inherits Rectangle {
     in property <string> detail;
     in property <bool> done: false;
     callback clicked();
-    height: max(76px, lay.preferred-height);
+    height: max(64px, lay.preferred-height);
     background: ta.pressed ? S.panel-hi : S.panel;
     border-radius: S.r-lg;
     lay := HorizontalLayout {
-        padding: S.s4;
+        padding: S.s3;
+        padding-left: S.s4;
         spacing: S.s4;
         VerticalLayout {
             alignment: center;
@@ -106,7 +107,7 @@ export component PicturePage inherits Rectangle {
                 }
             }
             Text {
-                text: App.viewer-kept ? "Kept in Sanctm, sealed: it shows without the phone." : "Keep it sealed in Sanctm, or save a copy to Files.";
+                text: App.viewer-kept ? "Kept in Sanctm, sealed: it shows without the phone." : "Keep it sealed in Sanctm, or save a copy to Passport storage, the Airlock or a USB drive.";
                 color: App.viewer-kept ? S.ok : S.faint;
                 font-family: S.sans;
                 font-size: S.t-meta;
@@ -162,13 +163,48 @@ export component PicturePage inherits Rectangle {
                         root.sheet = false;
                     }
                 }
-                SaveOption {
-                    icon: Images.image("md-file-p");
-                    title: "Save a copy to Files";
-                    detail: "Pick a folder in Passport storage, the Airlock (to copy it to a computer over USB) or a USB drive. A plain PNG: other apps can open it.";
+                // One tap: the folder the last copy went to.
+                if App.last-save != "": SaveOption {
+                    icon: Images.image("folder-p");
+                    title: "Save to the last folder";
+                    detail: App.last-save;
                     clicked => {
                         root.sheet = false;
-                        Actions.save-picture-copy(App.viewer-id);
+                        Actions.save-picture-copy(App.viewer-id, 3);
+                    }
+                }
+                Text {
+                    text: "Or save a plain PNG copy (not sealed) in a folder you pick:";
+                    color: S.muted;
+                    font-family: S.sans;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                }
+                SaveOption {
+                    icon: Images.image("folder-p");
+                    title: "Passport storage";
+                    detail: "Encrypted storage on this Passport. Other apps on it can open the copy.";
+                    clicked => {
+                        root.sheet = false;
+                        Actions.save-picture-copy(App.viewer-id, 0);
+                    }
+                }
+                SaveOption {
+                    icon: Images.image("airlock-p");
+                    title: "Airlock";
+                    detail: "Shows up on a computer over USB. Unplug the Passport from the computer before you save.";
+                    clicked => {
+                        root.sheet = false;
+                        Actions.save-picture-copy(App.viewer-id, 1);
+                    }
+                }
+                SaveOption {
+                    icon: Images.image("usb-p");
+                    title: "USB drive";
+                    detail: "A drive plugged into the Passport.";
+                    clicked => {
+                        root.sheet = false;
+                        Actions.save-picture-copy(App.viewer-id, 2);
                     }
                 }
                 Btn {

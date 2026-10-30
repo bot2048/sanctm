@@ -297,6 +297,9 @@ export global App {
     in property <int> viewer-w: 0;
     in property <int> viewer-h: 0;
     in property <bool> viewer-kept: false;
+    // The folder the last copy went to ("Passport storage / Pictures"), offered as one tap;
+    // "" before the first copy.
+    in property <string> last-save: "";
 
     // Import
     in-out property <string> import-text: "";
@@ -370,8 +373,9 @@ export global Actions {
     callback close-picture();
     callback keep-picture(string);
     callback forget-picture(string);
-    // Save a PNG copy in a folder picked in KeyOS Files (Passport storage, Airlock, USB drive).
-    callback save-picture-copy(string);
+    // Save a PNG copy of a picture. Where: 0 Passport storage, 1 the Airlock, 2 a USB drive
+    // (a folder is picked in KeyOS's file browser, in that place only), 3 the last folder.
+    callback save-picture-copy(string, int);
     pure callback byte-len(string) -> int;
     // Only spaces and line breaks: nothing to send (the core refuses it too).
     pure callback is-blank(string) -> bool;

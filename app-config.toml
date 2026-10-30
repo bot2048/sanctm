@@ -25,9 +25,11 @@ template = ["gui-app", "navigable"]
 "os/rgb-server" = ["SetAllTo"]
 # Sealed profile / contacts / inbox files in this app's own AppData (durable writes).
 "os/fs" = ["SeekFile", "WriteFile", "TruncateFile", "Flush", "Rename", "Remove",
-    # "Save a copy to Files": a PNG in a folder the user picks (durable_file_write opens it
-    # read+write, so each place needs both). Prompts once (grantOnFirstUse).
+    # "Save a copy": a PNG in a folder the user picks in Passport storage, the Airlock or a USB
+    # drive (durable_file_write opens it read+write, so each place needs both). Each place
+    # prompts once (grantOnFirstUse).
     "GetUserReadAccess", "GetUserWriteAccess", "GetAirlockReadAccess", "GetAirlockWriteAccess",
+    "GetUsbReadAccess", "GetUsbWriteAccess",
 ]
 
 # Scanning someone's npub from the Launcher opens a new chat with them.

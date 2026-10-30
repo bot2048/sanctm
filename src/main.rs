@@ -771,6 +771,7 @@ fn refresh_viewer(ui: &AppWindow, st: &State) {
     app.set_viewer_w(*w as i32);
     app.set_viewer_h(*h as i32);
     app.set_viewer_kept(*kept);
+    app.set_last_save(st.slot_profile.last_save.as_ref().map(save_label).unwrap_or_default().into());
     let title = match (st.session.as_ref(), st.open_peer) {
         (Some(s), Some(peer)) => match s.inbox.find_message(id) {
             Some(m) if m.out => "Picture you sent".to_string(),
@@ -1789,17 +1790,36 @@ fn utc_stamp(t: u64) -> (String, String) {
 }
 
 /// Where a folder picked in Files lives, for the file system.
-fn pick_location(l: PickLocation) -> (Location, &'static str) {
+/// The places a picture copy can go, as the file browser, the file system and the UI name them.
+const PLACES: [(&str, PickLocation, Location, &str); 3] = [
+    ("user", PickLocation::Internal, Location::User, "Passport storage"),
+    ("airlock", PickLocation::Airlock, Location::Airlock, "the Airlock"),
+    ("usb", PickLocation::External, Location::Usb, "the USB drive"),
+];
+
+fn place_of(l: PickLocation) -> usize {
     match l {
-        PickLocation::Internal => (Location::User, "Passport storage"),
-        PickLocation::Airlock => (Location::Airlock, "the Airlock"),
-        PickLocation::External => (Location::Usb, "the USB drive"),
+        PickLocation::Internal => 0,
+        PickLocation::Airlock => 1,
+        PickLocation::External => 2,
     }
 }
 
-/// "Save a copy to Files": the user picks a folder (Passport storage, the Airlock, a USB
-/// drive) in KeyOS's own file browser, and the picture is written there as a PNG.
-fn save_picture_copy(ui: &AppWindow, msg: &str) {
+/// "Passport storage / Pictures" for the Save sheet's one-tap row.
+fn save_label(p: &store::SavePlace) -> String {
+    let Some((_, _, _, name)) = PLACES.iter().find(|(key, ..)| *key == p.place) else { return String::new() };
+    let mut name = name.strip_prefix("the ").unwrap_or(name).to_string();
+    if let Some(first) = name.get(..1) {
+        name = first.to_uppercase() + &name[1..];
+    }
+    let dir = p.dir.trim_matches('/');
+    if dir.is_empty() { name } else { format!("{name} / {dir}") }
+}
+
+/// "Save a copy": the picture is written as a PNG to a folder the user picks in KeyOS's own
+/// file browser, opened on one place only (Passport storage, the Airlock or a USB drive), or
+/// straight to the folder used last time (`place` 3).
+fn save_picture_copy(ui: &AppWindow, msg: &str, place: i32) {
     // Make the PNG first, so no state is borrowed while the file browser is up.
     let mut job = None;
     with_app(|ui, st| {
@@ -1815,21 +1835,30 @@ fn save_picture_copy(ui: &AppWindow, msg: &str) {
         }
     });
     let Some((png, name)) = job else { return };
-    let options = SelectFileOptions::default()
-        .with_dir_selection_mode(true)
-        .with_start_location(PickLocation::Internal)
-        .with_allowed_locations(AllowedLocations::All);
-    let picked = match select_file::<gui_permissions::GuiPermissions>(options) {
-        Ok(Some(result)) => result.files().first().cloned(),
-        Ok(None) => None, // cancelled
-        Err(e) => {
-            log::error!("file browser: {e:?}");
-            toast(ui, "Files could not be opened, so nothing was saved.");
-            return;
+    let picked = if place == 3 {
+        let mut last = None;
+        with_app(|_, st| {
+            last = st.slot_profile.last_save.as_ref().and_then(|p| PLACES.iter().position(|(key, ..)| *key == p.place).map(|i| (p.dir.clone(), i)));
+        });
+        last
+    } else {
+        let Some(&(_, pick, ..)) = PLACES.get(place.clamp(0, 2) as usize) else { return };
+        let options = SelectFileOptions::default()
+            .with_dir_selection_mode(true)
+            .with_start_location(pick)
+            .with_allowed_locations(AllowedLocations::specific([pick]));
+        match select_file::<gui_permissions::GuiPermissions>(options) {
+            Ok(Some(result)) => result.files().first().map(|(dir, l)| (dir.clone(), place_of(*l))),
+            Ok(None) => None, // cancelled
+            Err(e) => {
+                log::error!("file browser: {e:?}");
+                toast(ui, "Files could not be opened, so nothing was saved.");
+                return;
+            }
         }
     };
-    let Some((dir, where_)) = picked else { return };
-    let (location, place) = pick_location(where_);
+    let Some((dir, i)) = picked else { return };
+    let (key, _, location, place_name) = PLACES[i];
     let dir = dir.trim_end_matches('/');
     let path = if dir.is_empty() { name.clone() } else { format!("{dir}/{name}") };
     with_app(|ui, st| {
@@ -1844,7 +1873,16 @@ fn save_picture_copy(ui: &AppWindow, msg: &str) {
             return;
         }
         match st.store.export(&path, location, &png) {
-            Ok(()) => toast(ui, &format!("Saved to {place}{}{}: {name}. It is not sealed there.", if dir.is_empty() { "" } else { " / " }, dir.trim_start_matches('/'))),
+            Ok(()) => {
+                toast(ui, &format!("Saved to {place_name}{}{}: {name}. It is not sealed there.", if dir.is_empty() { "" } else { " / " }, dir.trim_start_matches('/')));
+                st.slot_profile.last_save = Some(store::SavePlace { place: key.to_string(), dir: dir.to_string() });
+                if let Err(e) = st.store.save_profile(st.slot, &st.slot_profile) {
+                    log::warn!("storage: {e}");
+                }
+                refresh_viewer(ui, st);
+            }
+            // While a computer is plugged in it holds the Airlock, and the Passport cannot write.
+            Err(e) if location == Location::Airlock => toast(ui, &format!("Not saved: {e}. If the Passport is plugged into a computer, unplug it first.")),
             Err(e) => toast(ui, &format!("Not saved: {e}.")),
         }
     });
@@ -2017,12 +2055,12 @@ fn app_main(cx: AppContext, ui: AppWindow) {
 
     let weak = ui.as_weak();
     let weak_save = weak.clone();
-    actions.on_save_picture_copy(move |id| {
+    actions.on_save_picture_copy(move |id, place| {
         // Files is a modal app: open it outside this callback, with no borrow held.
         let weak = weak_save.clone();
         Timer::single_shot(Duration::ZERO, move || {
             if let Some(ui) = weak.upgrade() {
-                save_picture_copy(&ui, &id);
+                save_picture_copy(&ui, &id, place);
             }
         });
     });

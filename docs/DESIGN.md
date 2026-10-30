@@ -157,8 +157,11 @@ cards inside them darken the purple (#0000002e) so every line stays above 4.5:1.
 * **Me / Accounts**: you, then Your npub with its QR first (Show my npub lands here), then
   Accounts, Phone link, DM inbox relays, Settings, each a section.
 * **Notice**: what happened, what to do, one primary action.
-* **Picture viewer**: the picture, big, and Save: kept sealed in Sanctm, or a PNG copy in a
-  folder picked in KeyOS Files.
+* **Picture viewer**: the picture, big, and Save. The Save sheet: Keep in Sanctm (sealed), Save
+  to the last folder (one tap, once there is one), then a plain PNG copy in one of three places,
+  each opening KeyOS's file browser on that place only to pick a folder: Passport storage, the
+  Airlock (says to unplug from a computer first) and a USB drive. KeyOS's picker cannot start
+  inside a folder, so the last folder is remembered per account (sealed profile) instead.
 
 ## Review log
 

@@ -53,7 +53,8 @@ screen. The internet-facing device becomes a dumb courier.
   are marked until you save them, and look-alike contact names are refused.
 * **Pictures.** Encrypted photos (kind 15, as Amethyst and 0xchat send them) are decrypted on
   the Passport; picture links load only when you tap. **Save** keeps a picture sealed in
-  Sanctm or writes a PNG copy to a folder you pick in KeyOS Files.
+  Sanctm or writes a PNG copy to Passport storage, the Airlock or a USB drive, in a folder you
+  pick (or straight to the folder you used last).
 * **Relays done right.** Your DM inbox relays (kind 10050) and relay logins (NIP-42) are signed
   on the Passport, logins only for your own relays. 11 well-known relays by default.
 * **Made for Passport.** Nostr purple theme that follows KeyOS light and dark, the Passport
@@ -119,8 +120,9 @@ signer.
   only ciphertext; the Passport checks its hash, decrypts it (AES-256-GCM) and shows the picture.
   Picture links in messages load only when you tap them. Video and voice show as cards.
   **Save** on a picture offers two places: kept sealed in Sanctm (only this app opens it, and
-  it shows without the phone), or a plain PNG copy in a folder you pick in KeyOS Files
-  (Passport storage, the Airlock to copy it to a computer over USB, or a USB drive).
+  it shows without the phone), or a plain PNG copy in a place you choose: Passport storage,
+  the Airlock (to copy it to a computer over USB) or a USB drive, in a folder you pick in KeyOS's
+  file browser. The folder used last is offered again as one tap.
 * *Reactions* (kind 7), *replies*, *deletes* (kind 5, author only), *disappearing messages*
   (NIP-40) and `nostr:` *mentions* shown as `@name`. Reactions and replies are sealed and
   gift-wrapped like messages.
@@ -245,7 +247,7 @@ docs/                 FEATURES.md (compared with other Nostr DM apps), DESIGN.md
 * Hardware: builds for the device, but there is no app link until QLv2.
 * "Publish as my DM relays" lists every relay the companion uses (11 by default); NIP-17
   suggests a few that accept gift wraps. Edit the list under the companion's Settings first.
-* Saving a copy to Files asks KeyOS for access once. The Airlock cannot be written while a
+* Saving a copy asks KeyOS for access once per place. The Airlock cannot be written while a
   computer is connected over USB, and USB drives may not be open to third-party apps yet.
 
 ## Future scope
