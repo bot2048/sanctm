@@ -161,7 +161,8 @@ So the transport is a seam (`src/transport.rs`):
 ## Run it
 
 Needs the Foundation SDK 1.1.0 (`foundation doctor` clean). Its Rust toolchain is only on the
-path inside `foundation develop`.
+path inside `foundation develop`. On a fresh Ubuntu, `./setup.sh` installs everything (Nix, the
+SDK and its toolchain, Node.js) and runs the protocol tests; open a new terminal afterwards.
 
 **1. The app in the simulator**
 

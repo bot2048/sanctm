@@ -20,6 +20,7 @@ core/tests/
 core/examples/
 docs/TESTING.md
 docs/DEMO.md
+sanctm-testkit.tar.gz
 node_modules/
 *.key
 .peer-key
