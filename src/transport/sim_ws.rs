@@ -38,16 +38,17 @@ fn host_of(v: &str) -> &str {
     v.split([':', '/']).next().unwrap_or_default()
 }
 
-/// Accept the companion page served from this machine (localhost) or from the address the
-/// browser used to reach us, when that is an IP address; refuse every other website, so a
-/// page you happen to visit cannot drive the link. Not accepted: Origin "null" (a sandboxed
-/// iframe on any site sends it) and host names matching the Host header (DNS rebinding: an
-/// attacker's name that resolves to this machine). Non-browser clients send no Origin.
+/// Accept the companion page served from this machine (localhost, or 0.0.0.0, the address
+/// `python3 -m http.server` prints) or from the address the browser used to reach us, when
+/// that is an IP address; refuse every other website, so a page you happen to visit cannot
+/// drive the link. Not accepted: Origin "null" (a sandboxed iframe on any site sends it) and
+/// host names matching the Host header (DNS rebinding: an attacker's name that resolves to
+/// this machine). Non-browser clients send no Origin.
 fn check_origin(req: &Request, resp: Response) -> Result<Response, ErrorResponse> {
     let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
     let Some(origin) = header("origin") else { return Ok(resp) };
     let host = host_of(origin);
-    let ok = matches!(host, "localhost" | "127.0.0.1" | "::1")
+    let ok = matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0")
         || (host.parse::<std::net::IpAddr>().is_ok() && header("host").map(host_of) == Some(host));
     if ok {
         return Ok(resp);
