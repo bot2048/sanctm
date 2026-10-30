@@ -2,25 +2,26 @@
 
 import { Images } from "@ui/theme.slint";
 import { S, App, Actions, Pages, ChatRow } from "../state.slint";
-import { Logo, UserIcon, Eyebrow, Body, Panel, Pill, Badge, Avatar, Btn, EmptyState } from "../widgets.slint";
+import { UserIcon, ChevronIcon, IconBtn, Body, Panel, Badge, Avatar, Btn, EmptyState } from "../widgets.slint";
 
+// One row of the chats list: full width, a divider under it from the text column on.
 component ChatItem inherits Rectangle {
     in property <ChatRow> chat;
+    in property <bool> last;
     callback open();
     // Width of the time column: "now" up to "Sep 25 2025" (older than this year).
-    property <length> side: max(62px, when.preferred-width);
-    height: 80px;
-    background: ta.pressed ? S.panel-hi : S.panel;
-    border-radius: S.r-lg;
-    border-width: 1px;
-    border-color: root.chat.unread > 0 ? S.accent.with-alpha(0.55) : S.line;
+    property <length> side: max(48px, when.preferred-width);
+    property <bool> unread: root.chat.unread > 0;
+    property <length> text-x: S.gutter + 48px + S.s4;
+    height: 76px;
+    background: ta.pressed ? S.panel : transparent;
     ta := TouchArea {
         clicked => {
             root.open();
         }
     }
     Avatar {
-        x: S.s4;
+        x: S.gutter;
         size: 48px;
         initial: root.chat.initial;
         tint: root.chat.tint;
@@ -28,10 +29,10 @@ component ChatItem inherits Rectangle {
         has-picture: root.chat.has-avatar;
     }
     VerticalLayout {
-        x: 78px;
-        width: parent.width - 78px - root.side - S.s5;
+        x: root.text-x;
+        width: parent.width - root.text-x - root.side - S.gutter - S.s3;
         alignment: center;
-        spacing: S.s1;
+        spacing: 3px;
         HorizontalLayout {
             spacing: S.s2;
             Text {
@@ -39,123 +40,194 @@ component ChatItem inherits Rectangle {
                 color: S.text;
                 font-family: root.chat.mono ? S.mono : S.sans;
                 font-size: root.chat.mono ? 15px : S.t-row;
-                font-weight: 700;
+                font-weight: root.chat.mono ? 400 : (root.unread ? 700 : 600);
                 overflow: elide;
                 horizontal-stretch: 1;
                 vertical-alignment: center;
             }
+            // Not in your contacts ("New" would read as "unread").
             if !root.chat.known: VerticalLayout {
                 alignment: center;
                 Badge {
-                    text: "NEW";
+                    text: "Unknown";
                 }
             }
         }
         Text {
             text: root.chat.preview;
-            color: root.chat.unread > 0 ? S.text : S.muted;
+            color: root.unread ? S.text : S.muted;
             font-family: S.sans;
             font-size: S.t-small;
-            font-weight: root.chat.unread > 0 ? 600 : 400;
             overflow: elide;
         }
     }
     VerticalLayout {
-        x: parent.width - S.s4 - root.side;
+        x: parent.width - S.gutter - root.side;
         width: root.side;
         alignment: center;
         spacing: 6px;
         when := Text {
             text: root.chat.when;
-            color: root.chat.unread > 0 ? S.accent-text : S.faint;
+            color: root.unread ? S.accent-text : S.faint;
             font-family: S.sans;
             font-size: S.t-meta;
-            font-weight: 600;
+            font-weight: root.unread ? 700 : 400;
             horizontal-alignment: right;
         }
-        // Always reserve the badge row, so the time sits at the same height in every row.
+        // Always reserve the count's row, so the time sits at the same height in every row.
         HorizontalLayout {
             alignment: end;
-            height: 24px;
-            if root.chat.unread > 0: Rectangle {
-                width: max(24px, n.preferred-width + 14px);
-                height: 24px;
-                border-radius: 12px;
+            height: 20px;
+            if root.unread: Rectangle {
+                width: max(20px, n.preferred-width + 10px);
+                height: 20px;
+                border-radius: 10px;
                 background: S.fill;
                 n := Text {
                     text: root.chat.unread > 99 ? "99+" : root.chat.unread;
                     color: S.on-accent;
                     font-family: S.sans;
                     font-size: S.t-meta;
-                    font-weight: 800;
+                    font-weight: 700;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
             }
         }
     }
+    if !root.last: Rectangle {
+        x: root.text-x;
+        y: parent.height - 1px;
+        width: parent.width - root.text-x;
+        height: 1px;
+        background: S.line;
+    }
+}
+
+// The phone link: the state in its colour, what it means, and a way to Me (link, relays).
+component LinkLine inherits Rectangle {
+    property <color> tone: App.link-up ? (App.link-title == "No relays" ? S.warn : App.synced ? S.ok : S.accent-text) : S.faint;
+    height: max(56px, lay.preferred-height);
+    background: ta.pressed ? S.panel : transparent;
+    ta := TouchArea {
+        clicked => {
+            Actions.show-me();
+        }
+    }
+    lay := HorizontalLayout {
+        padding-left: S.gutter;
+        padding-right: S.s4;
+        padding-top: S.s3;
+        padding-bottom: S.s3;
+        spacing: S.s3;
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                spacing: 6px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 4px;
+                        background: root.tone;
+                    }
+                }
+                Text {
+                    text: App.link-title;
+                    color: root.tone;
+                    font-family: S.sans;
+                    font-size: S.t-small;
+                    font-weight: 600;
+                    horizontal-stretch: 1;
+                }
+            }
+            Text {
+                text: App.link-detail;
+                color: S.muted;
+                font-family: S.sans;
+                font-size: 13px;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            ChevronIcon {
+                width: 18px;
+                height: 18px;
+            }
+        }
+    }
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: S.line;
+    }
 }
 
 export component ChatsPage inherits Rectangle {
     background: S.bg;
     property <bool> empty: App.chats.length == 0;
+    property <length> empty-actions: 2 * S.btn-h + S.s3 + S.s3 + 28px;
     Flickable {
         y: S.top-inset;
-        height: parent.height - S.top-inset - (root.empty ? 100px : 0px);
+        height: parent.height - S.top-inset - (root.empty ? root.empty-actions : 0px);
         VerticalLayout {
-            padding-left: S.gutter;
-            padding-right: S.gutter;
-            padding-top: S.s3;
-            padding-bottom: root.empty ? S.s6 : 110px;
-            spacing: S.s3;
+            padding-bottom: S.s6;
             alignment: start;
 
+            // Name, the account in use, then new chat and you.
             HorizontalLayout {
-                spacing: S.s3;
-                height: 56px;
-                VerticalLayout {
-                    alignment: center;
-                    Logo {
-                        width: 40px;
-                        height: 40px;
-                    }
-                }
+                padding-left: S.gutter;
+                padding-right: S.s4;
+                spacing: S.s2;
+                height: 72px;
                 VerticalLayout {
                     alignment: center;
                     horizontal-stretch: 1;
-                    spacing: 1px;
+                    spacing: 2px;
                     Text {
-                        text: "Sanctum";
+                        text: "Sanctm";
                         color: S.text;
                         font-family: S.sans;
-                        font-size: 24px;
-                        font-weight: 800;
+                        font-size: 26px;
+                        font-weight: 700;
                     }
                     Text {
                         text: App.accounts.length > 1 ? App.my-name + " · " + App.my-npub-short : App.my-npub-short;
                         color: S.muted;
                         font-family: App.accounts.length > 1 ? S.sans : S.mono;
                         font-size: S.t-meta;
-                        font-weight: App.accounts.length > 1 ? 600 : 400;
                         overflow: elide;
                     }
                 }
-                // You: your avatar (or a person icon), opens the Me page.
+                VerticalLayout {
+                    alignment: center;
+                    IconBtn {
+                        size: 48px;
+                        icon-size: 24px;
+                        icon: S.dark ? Images.image("compose-d") : Images.image("compose-l");
+                        clicked => {
+                            Actions.new-chat();
+                        }
+                    }
+                }
+                // You: your avatar (or a person icon), opens Me.
                 VerticalLayout {
                     alignment: center;
                     Rectangle {
                         width: 48px;
                         height: 48px;
-                        border-radius: 24px;
-                        background: me-ta.pressed ? S.panel-hi : S.panel;
-                        border-width: 1px;
-                        border-color: S.line-hi;
+                        border-radius: S.r-lg;
+                        background: me-ta.pressed ? S.panel : transparent;
                         if !App.my-has-avatar: UserIcon {
                             width: 24px;
                             height: 24px;
                         }
                         if App.my-has-avatar: Avatar {
-                            size: 46px;
+                            size: 36px;
                             picture: App.my-avatar;
                             has-picture: true;
                         }
@@ -167,67 +239,49 @@ export component ChatsPage inherits Rectangle {
                     }
                 }
             }
+            Rectangle {
+                height: 1px;
+                background: S.line;
+            }
 
-            Panel {
-                inner-padding: 14px;
-                inner-spacing: 6px;
-                accent: App.link-up ? S.ok.with-alpha(0.45) : S.line;
-                HorizontalLayout {
-                    Pill {
-                        text: App.link-title;
-                        tone: App.link-up ? (App.link-title == "NO RELAYS" ? S.warn : App.synced ? S.ok : S.accent-text) : S.faint;
+            LinkLine { }
+
+            if App.toast != "" || App.storage-note != "": VerticalLayout {
+                padding-left: S.gutter;
+                padding-right: S.gutter;
+                padding-top: S.s3;
+                spacing: S.s3;
+                if App.toast != "": Panel {
+                    inner-padding: S.s3;
+                    Body {
+                        text: App.toast;
+                        font-size: S.t-small;
+                        font-weight: 600;
                     }
-                    Rectangle {
-                        horizontal-stretch: 1;
+                }
+                if App.storage-note != "": Panel {
+                    accent: S.bad;
+                    Body {
+                        text: App.storage-note;
+                        color: S.bad;
+                        font-size: S.t-small;
                     }
-                }
-                Text {
-                    text: App.link-detail;
-                    color: S.muted;
-                    font-family: S.sans;
-                    font-size: 13px;
-                    wrap: word-wrap;
-                }
-            }
-
-            if App.toast != "": Panel {
-                inner-padding: S.s3;
-                accent: S.accent.with-alpha(0.5);
-                Body {
-                    text: App.toast;
-                    color: S.accent-text;
-                    font-size: S.t-small;
-                    font-weight: 600;
-                }
-            }
-
-            if App.storage-note != "": Panel {
-                accent: S.bad.with-alpha(0.6);
-                Body {
-                    text: App.storage-note;
-                    color: S.bad;
-                    font-size: S.t-small;
-                }
-            }
-
-            if !root.empty: HorizontalLayout {
-                padding-top: S.s1;
-                Eyebrow {
-                    text: App.unread-total > 0 ? "CHATS · " + App.unread-total + " UNREAD" : "CHATS";
                 }
             }
 
             if root.empty: VerticalLayout {
-                padding-top: S.s8;
+                padding-left: S.gutter;
+                padding-right: S.gutter;
+                padding-top: 96px;
                 EmptyState {
-                    icon: Images.image("chat-p");
                     title: "No chats yet";
-                    body: "Start one with someone's npub or name@domain, or open Me to show your npub to a friend.";
+                    body: "Show your npub so a friend can scan it, or write to someone with their npub or name@domain.";
                 }
             }
 
-            for c in App.chats: ChatItem {
+            for c[i] in App.chats: ChatItem {
                 chat: c;
+                last: i == App.chats.length - 1;
                 open => {
                     Actions.open-chat(c.peer);
                 }
@@ -235,39 +289,25 @@ export component ChatsPage inherits Rectangle {
         }
     }
 
-    // Empty: the call to action is the page's bottom button.
+    // Empty: the two ways a first conversation starts, as the page's bottom buttons. Someone
+    // new to Nostr usually has nobody to write to yet: showing the npub comes first.
     if root.empty: VerticalLayout {
-        y: parent.height - 100px;
-        height: 100px;
+        y: parent.height - root.empty-actions;
+        height: root.empty-actions;
         padding-left: S.gutter;
         padding-right: S.gutter;
         padding-top: S.s3;
         padding-bottom: 28px;
+        spacing: S.s3;
         Btn {
-            text: "Start a chat";
+            text: "Show my npub";
             clicked => {
-                Actions.new-chat();
+                Actions.show-me();
             }
         }
-    }
-
-    // New chat
-    if !root.empty: Rectangle {
-        x: parent.width - 92px;
-        y: parent.height - 96px;
-        width: 68px;
-        height: 68px;
-        border-radius: 34px;
-        background: fab-ta.pressed ? S.fill-pressed : S.fill;
-        drop-shadow-blur: 14px;
-        drop-shadow-color: S.accent.with-alpha(0.45);
-        Image {
-            width: 30px;
-            height: 30px;
-            source: Images.image("plus-w");
-            image-fit: contain;
-        }
-        fab-ta := TouchArea {
+        Btn {
+            text: "Write to someone";
+            kind: 1;
             clicked => {
                 Actions.new-chat();
             }

@@ -1,4 +1,4 @@
-# Sanctum: private Nostr DMs on Passport Prime
+# Sanctm: private Nostr DMs on Passport Prime
 
 Private Nostr messages, written and read on Passport. The Passport holds the key and
 seals, gift-wraps and opens every message itself (NIP-17). The phone is only the pipe: it
@@ -22,7 +22,7 @@ Built for the Bitmela hackathon on Foundation's KeyOS SDK 1.1.0 (KeyOS 1.4).
 [Future scope](#future-scope) · [License](#license)
 
 ```
- Passport Prime (Sanctum app)          phone / laptop (companion)            Nostr relays
+ Passport Prime (Sanctm app)          phone / laptop (companion)            Nostr relays
  ┌───────────────────────────────┐  link  ┌──────────────────────────┐  wss  ┌────────────┐
  │ nsec (from the app seed)      │◀──────▶│ subscribes kind 1059 #p  │◀─────▶│ damus, mom │
  │ write → rumor → seal → wrap   │ frames │ publishes wraps to the   │       │ primal,    │
@@ -36,7 +36,7 @@ Built for the Bitmela hackathon on Foundation's KeyOS SDK 1.1.0 (KeyOS 1.4).
 
 A phone is a bad place for private conversations: keyboards, screenshots, cloud backups,
 malware. Hardware wallets already keep a key offline and show what you sign on a screen you
-can trust. Sanctum puts the two ends of a conversation, writing and reading, on that
+can trust. Sanctm puts the two ends of a conversation, writing and reading, on that
 screen. The internet-facing device becomes a dumb courier.
 
 ## Features
@@ -53,7 +53,7 @@ screen. The internet-facing device becomes a dumb courier.
   are marked until you save them, and look-alike contact names are refused.
 * **Pictures.** Encrypted photos (kind 15, as Amethyst and 0xchat send them) are decrypted on
   the Passport; picture links load only when you tap. **Save** keeps a picture sealed in
-  Sanctum or writes a PNG copy to a folder you pick in KeyOS Files.
+  Sanctm or writes a PNG copy to a folder you pick in KeyOS Files.
 * **Relays done right.** Your DM inbox relays (kind 10050) and relay logins (NIP-42) are signed
   on the Passport, logins only for your own relays. 11 well-known relays by default.
 * **Made for Passport.** Nostr purple theme that follows KeyOS light and dark, the Passport
@@ -105,7 +105,7 @@ recipient's relay: that would tell it who sent the wrap), only for nonce-like ch
 at most twice per relay per minute, so the phone cannot use the Passport as a general login
 signer.
 
-**Profiles, pictures, reactions.** Sanctum speaks the rest of what other NIP-17 apps send
+**Profiles, pictures, reactions.** Sanctm speaks the rest of what other NIP-17 apps send
 (details and a comparison with 0xchat, Amethyst, Coracle, Damus and Nostur in
 [docs/FEATURES.md](docs/FEATURES.md)):
 
@@ -118,7 +118,7 @@ signer.
 * *Encrypted photos* (kind 15, as Amethyst, 0xchat and Nostur send them): the phone downloads
   only ciphertext; the Passport checks its hash, decrypts it (AES-256-GCM) and shows the picture.
   Picture links in messages load only when you tap them. Video and voice show as cards.
-  **Save** on a picture offers two places: kept sealed in Sanctum (only this app opens it, and
+  **Save** on a picture offers two places: kept sealed in Sanctm (only this app opens it, and
   it shows without the phone), or a plain PNG copy in a folder you pick in KeyOS Files
   (Passport storage, the Airlock to copy it to a computer over USB, or a USB drive).
 * *Reactions* (kind 7), *replies*, *deletes* (kind 5, author only), *disappearing messages*
@@ -164,9 +164,9 @@ path inside `foundation develop`.
 **1. The app in the simulator**
 
 ```sh
-git clone <this repo> sanctum && cd sanctum
+git clone <this repo> sanctm && cd sanctm
 foundation develop                     # a shell with the SDK toolchain
-foundation sim                         # builds (first time: 5-15 min) and opens KeyOS with Sanctum
+foundation sim                         # builds (first time: 5-15 min) and opens KeyOS with Sanctm
 ```
 
 **2. The companion page (the "phone")**, in a second terminal:
@@ -252,7 +252,7 @@ docs/                 FEATURES.md (compared with other Nostr DM apps), DESIGN.md
 
 * **QuantumLink.** When KeyOS 1.5 opens QLv2 to apps, implement `Link` over its app channel
   (`src/transport.rs`); the frames and everything above them stay the same, and the
-  companion's job moves into the phone side of QuantumLink. Sanctum then works on hardware
+  companion's job moves into the phone side of QuantumLink. Sanctm then works on hardware
   exactly as it does in the simulator.
 * **Phone-free messaging.** Carry gift wraps as animated QR codes (UR), which the Passport
   camera already reads, for conversations with no network device at all.

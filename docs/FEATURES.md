@@ -1,4 +1,4 @@
-# Sanctum features, checked against other Nostr DM apps
+# Sanctm features, checked against other Nostr DM apps
 
 This was built from a code read of 0xchat, Amethyst (Quartz), Coracle/welshman/Flotilla, Damus
 and Nostur, plus the current NIP-17 / 59 / 44 / 25 / 40 / 05 / 92 / B7 texts (October 2026).
@@ -7,7 +7,7 @@ trust, blocking) is deliberately left for a later version.
 
 ## Protocol (NIP-17 / NIP-59 / NIP-44)
 
-| | Sanctum | Notes from other clients |
+| | Sanctm | Notes from other clients |
 |---|---|---|
 | Kind 14 chat messages, seal (13) and gift wrap (1059) with one-time keys, timestamps jittered up to 2 days into the past | ✓ | |
 | Wrap signature checked before its id is remembered (a damaged copy cannot shadow the real one) | ✓ | 0xchat caches ids before checking |
@@ -34,7 +34,7 @@ trust, blocking) is deliberately left for a later version.
 
 ## Profiles and names
 
-| | Sanctum |
+| | Sanctm |
 |---|---|
 | Kind 0 fetched by the phone, **signature checked on the Passport**, only for keys we asked for | ✓ |
 | Privacy: our own profile asked for alone, others in small shuffled batches; contacts and people we wrote to fetched after sync, a stranger only when their chat is opened (a message alone tells the phone nothing) | ✓ |
@@ -49,7 +49,7 @@ trust, blocking) is deliberately left for a later version.
 
 ## Media
 
-| | Sanctum |
+| | Sanctm |
 |---|---|
 | Encrypted photo (kind 15): the phone downloads ciphertext only; decrypted, checked and decoded on the Passport (JPEG, PNG, WebP up to 12 MP; decoder memory capped at 64 MB) | ✓ |
 | Encrypted GIF | shown as a card: open on a phone app | |

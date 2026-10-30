@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Sanctum: shared types, design tokens and the Rust <-> UI globals. The tokens follow
+// Sanctm: shared types, design tokens and the Rust <-> UI globals. The tokens follow
 // docs/DESIGN.md; pages use them instead of ad-hoc numbers.
 
 export struct ChatRow {
@@ -29,6 +29,9 @@ export struct MsgRow {
     id: string,
     text: string,
     out: bool,
+    // First of a run of messages from the same side (a few minutes apart): the run gets the
+    // wider gap above it, and only its first bubble a round top corner on the sender's side.
+    run-start: bool,
     meta: string,
     failed: bool,
     // Ours, and stored by at least one relay (a tick next to the meta line).
@@ -91,37 +94,38 @@ export global Pages {
     out property <int> accounts: 11;
 }
 
-// Nostr purple on near-black (dark) and on lavender-white (light). Rust sets `dark` from the
-// KeyOS system theme and follows changes live; every colour below derives from it.
+// KeyOS's own neutrals (warm near-black #231f20 in dark, white in light, Foundation's greys),
+// with Nostr purple as the one accent: your messages, the send button, unread counts, links.
+// Rust sets `dark` from the KeyOS system theme and follows changes live.
 export global S {
     in property <bool> dark: true;
 
     // ---- colour ----
-    out property <color> bg: dark ? #0b0812 : #f7f3fd;
-    out property <color> panel: dark ? #151020 : #ffffff;
-    out property <color> panel-hi: dark ? #1e172d : #efe7fb;
-    out property <color> line: dark ? #2a2140 : #e2d6f4;
-    out property <color> line-hi: dark ? #3b2e58 : #cbb9ea;
-    out property <color> text: dark ? #f3eefb : #1b1326;
-    out property <color> muted: dark ? #a497be : #64587d;
-    // Faint text (times, hints, counters) still has to reach 4.5:1 on bg and panel.
-    out property <color> faint: dark ? #958ab2 : #6b5e84;
-    // #8e30eb is the Nostr purple; on black it is lifted so it stays readable as text.
-    out property <color> accent: dark ? #a35cff : #8e30eb;
-    out property <color> accent-text: dark ? #c39bff : #7420d0;
+    out property <color> bg: dark ? #231f20 : #ffffff;
+    out property <color> panel: dark ? #2d292a : #f4f3f3;
+    out property <color> panel-hi: dark ? #3a3536 : #e8e7e7;
+    out property <color> line: dark ? #3d3839 : #e3e2e2;
+    out property <color> line-hi: dark ? #5a5556 : #c9c7c8;
+    out property <color> text: dark ? #ffffff : #231f20;
+    out property <color> muted: dark ? #b8b5b6 : #5c5859;
+    // Faint text (times, hints, counters) still reaches 4.5:1 on bg and panel.
+    out property <color> faint: dark ? #9f9c9d : #6b6768;
+    // #8e30eb is the Nostr purple; on the dark grey it is lifted so it reads as text.
+    out property <color> accent: dark ? #a666ff : #8e30eb;
+    out property <color> accent-text: dark ? #bf94ff : #7420d0;
     out property <color> accent-deep: dark ? #7f3ff0 : #6d1fc9;
-    out property <color> accent-soft: dark ? #a35cff29 : #8e30eb1a;
+    out property <color> accent-soft: dark ? #a666ff26 : #8e30eb14;
     out property <color> on-accent: #ffffff;
-    // Fill behind white labels (primary buttons, the + button, unread badges): the Nostr purple
-    // in both themes, since white on the lifted dark accent is only 3.8:1.
+    // Fill behind white labels (primary buttons, your bubbles, unread counts): the Nostr purple
+    // in both themes (white on it is 5.6:1).
     out property <color> fill: #8e30eb;
     out property <color> fill-pressed: #7420d0;
-    out property <color> bubble-in: dark ? #1f1830 : #ffffff;
-    out property <color> bubble-in-line: dark ? #2d2345 : #e2d6f4;
+    out property <color> bubble-in: dark ? #36312f : #efeeee;
+    out property <color> bubble-in-line: dark ? #36312f : #efeeee;
     out property <color> bubble-out: #8e30eb;
-    out property <color> ok: dark ? #36d49b : #0b774f;
-    out property <color> warn: dark ? #f4b740 : #844d07;
-    out property <color> bad: dark ? #ff5c74 : #b81f3d;
+    out property <color> ok: dark ? #4cc38a : #0b774f;
+    out property <color> warn: dark ? #e8a33d : #8a5300;
+    out property <color> bad: dark ? #ff6b6b : #c62828;
     // Modal scrim (Foundation's overlay colour).
     out property <color> overlay: #111111e6;
 
@@ -152,14 +156,17 @@ export global S {
     out property <length> top-inset: 40px; // KeyOS status bar
 
     // ---- shape and size ----
-    out property <length> r-sm: 8px;
-    out property <length> r-md: 12px;
-    out property <length> r-lg: 16px;
-    out property <length> r-xl: 24px;
-    out property <length> r-bubble: 20px;
-    out property <length> radius: 16px;
+    // Small radii: 4 for tags, 8 for controls, rows and panels. Bubbles 10 with a 3 px tail.
+    // Avatars stay round.
+    out property <length> r-sm: 4px;
+    out property <length> r-md: 6px;
+    out property <length> r-lg: 8px;
+    out property <length> r-xl: 8px;
+    out property <length> r-bubble: 10px;
+    out property <length> r-tail: 3px;
+    out property <length> radius: 8px;
     out property <length> header-h: 64px;
-    out property <length> btn-h: 60px;
+    out property <length> btn-h: 56px;
     out property <length> btn-h-sm: 48px;
     out property <length> field-h: 56px;
     out property <length> touch: 56px;

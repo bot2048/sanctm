@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
-<title>Sanctum companion</title>
+<title>Sanctm companion</title>
 <style>
   :root {
     --bg: #0b0812; --panel: #151020; --panel-hi: #1e172d; --line: #2a2140; --line-hi: #3b2e58;
@@ -91,7 +91,7 @@
       <circle cx="12" cy="11" r="0.75" fill="#8E30EB"/>
     </svg>
     <div>
-      <h1>SANCTUM</h1>
+      <h1>SANCTM</h1>
       <div class="sub">Nostr DMs companion · carries gift wraps, never messages</div>
     </div>
   </header>
@@ -805,7 +805,7 @@
     };
     ws.onclose = () => {
       if (passport !== ws) return;
-      setPassport("bad", "Passport not linked", `Start Sanctum in the simulator. Retrying ${linkUrl}`);
+      setPassport("bad", "Passport not linked", `Start Sanctm in the simulator. Retrying ${linkUrl}`);
       cancelFetches();
       clearTimeout(eoseTimer); eoseSent = false; $("syncBadge").classList.add("hidden");
       retry = setTimeout(connectPassport, 2000);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { S, App, Actions } from "../state.slint";
-import { Body, Btn, StateIcon } from "../widgets.slint";
+import { Body, Btn } from "../widgets.slint";
 
 // What happened, what to do: the message on top, the actions at the bottom.
 export component ErrorPage inherits Rectangle {
@@ -16,35 +16,17 @@ export component ErrorPage inherits Rectangle {
         padding-top: S.top-inset;
         spacing: S.s5;
         alignment: center;
-        HorizontalLayout {
-            alignment: center;
-            Rectangle {
-                width: 96px;
-                height: 96px;
-                border-radius: 48px;
-                background: root.tone.with-alpha(0.14);
-                border-width: 2px;
-                border-color: root.tone;
-                StateIcon {
-                    width: 44px;
-                    height: 44px;
-                    kind: App.error-soft ? 1 : 2;
-                }
-            }
-        }
         Text {
             text: App.error-title;
             color: root.tone;
             font-family: S.sans;
             font-size: S.t-title-lg;
-            font-weight: 800;
-            horizontal-alignment: center;
+            font-weight: 700;
             wrap: word-wrap;
         }
         Body {
             text: App.error-body;
             color: S.muted;
-            horizontal-alignment: center;
         }
     }
     VerticalLayout {

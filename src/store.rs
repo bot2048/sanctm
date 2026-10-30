@@ -137,7 +137,7 @@ impl Store {
     /// not sealed, so other apps (and a computer on the Airlock) can open it.
     pub fn export(&self, path: &str, location: Location, data: &[u8]) -> Result<(), String> {
         self.fs.durable_file_write(path, location, data).map_err(|e| match e {
-            FsError::AccessDenied => "Sanctum may not write there".to_string(),
+            FsError::AccessDenied => "Sanctm may not write there".to_string(),
             FsError::FileNotFound => "that folder is gone".to_string(),
             _ => "could not write there".to_string(),
         })

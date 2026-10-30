@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Sanctum for Passport Prime: everything that touches keys, messages or the link.
+//! Sanctm for Passport Prime: everything that touches keys, messages or the link.
 //!
 //! * [`keys`], [`event`]  - secp256k1 keys, NIP-01 events, BIP-340 signatures
 //! * [`nip19`]            - npub / nsec / nprofile

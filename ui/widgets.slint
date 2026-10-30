@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Sanctum widgets, built on the design tokens in S (ui/state.slint, docs/DESIGN.md).
+// Sanctm widgets, built on the design tokens in S (ui/state.slint, docs/DESIGN.md).
 
 import { Images } from "@ui/theme.slint";
 import { S, Utils, MsgRow, ReactionRow } from "state.slint";
@@ -85,12 +85,12 @@ export component MediaIcon inherits Image {
     image-fit: contain;
 }
 
+// Section heading: sentence case, small and quiet; the content under it leads.
 export component Eyebrow inherits Text {
     color: S.muted;
     font-family: S.sans;
-    font-size: S.t-meta;
-    font-weight: 700;
-    letter-spacing: 1.4px;
+    font-size: 14px;
+    font-weight: 600;
 }
 
 export component Body inherits Text {
@@ -104,7 +104,8 @@ export component Mono inherits Text {
     color: S.text;
     font-family: S.mono;
     font-size: 16px;
-    wrap: char-wrap;
+    // The npub comes in 4-character groups: break between groups, never inside one.
+    wrap: word-wrap;
 }
 
 export component Panel inherits Rectangle {
@@ -113,7 +114,8 @@ export component Panel inherits Rectangle {
     in property <length> inner-spacing: 10px;
     background: S.panel;
     border-radius: S.r-lg;
-    border-width: 1px;
+    // A fill, no edge; an edge only when it says something (a warning, an error).
+    border-width: accent == S.line ? 0px : 1px;
     border-color: accent;
     VerticalLayout {
         padding: inner-padding;
@@ -122,50 +124,61 @@ export component Panel inherits Rectangle {
     }
 }
 
-// Status pill: a dot and a word in caps.
-export component Pill inherits Rectangle {
+// A titled part of a page: a hairline, a caps label, then the content on the page itself (no
+// card around it).
+export component Section inherits VerticalLayout {
+    in property <string> title;
+    spacing: S.s3;
+    padding-top: S.s2;
+    Rectangle {
+        height: 1px;
+        background: S.line;
+    }
+    if root.title != "": Eyebrow {
+        text: root.title;
+    }
+    @children
+}
+
+// Status: a dot in the state's colour and the state in words.
+export component Pill inherits HorizontalLayout {
     in property <string> text;
     in property <color> tone: S.ok;
-    height: 28px;
-    width: label.preferred-width + 34px;
-    border-radius: 14px;
-    background: tone.with-alpha(0.12);
-    border-width: 1px;
-    border-color: tone.with-alpha(0.55);
-    Rectangle {
-        x: 12px;
-        width: 8px;
-        height: 8px;
-        border-radius: 4px;
-        background: root.tone;
+    spacing: 6px;
+    VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background: root.tone;
+        }
     }
-    label := Text {
-        x: 26px;
+    Text {
         text: root.text;
         color: root.tone;
         font-family: S.sans;
-        font-size: S.t-meta;
-        font-weight: 700;
-        letter-spacing: 1.2px;
+        font-size: S.t-small;
+        font-weight: 600;
         vertical-alignment: center;
     }
 }
 
-// Small caps badge (NEW, IMPORTED).
+// A tag next to a name (Unknown, Imported): a word in the tag's colour, in a thin outline.
 export component Badge inherits Rectangle {
     in property <string> text;
     in property <color> tone: S.warn;
     height: 20px;
-    width: t.preferred-width + 14px;
-    border-radius: 10px;
-    background: tone.with-alpha(0.15);
+    width: t.preferred-width + 10px;
+    border-radius: S.r-sm;
+    border-width: 1px;
+    border-color: tone.with-alpha(0.6);
     t := Text {
         text: root.text;
         color: root.tone;
         font-family: S.sans;
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: 0.8px;
+        font-size: 11px;
+        font-weight: 600;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
@@ -182,7 +195,7 @@ export component Btn inherits Rectangle {
     max-height: button-height;
     preferred-height: button-height;
     horizontal-stretch: 1;
-    border-radius: button-height / 2;
+    border-radius: S.r-lg;
     // Disabled: a quiet panel with a faint label in every kind (a washed-out purple with a
     // white label is unreadable in the light theme).
     background: disabled ? (kind == 3 ? transparent : S.panel-hi)
@@ -190,8 +203,9 @@ export component Btn inherits Rectangle {
         : kind == 2 ? S.bad.with-alpha(ta.pressed ? 0.24 : 0.12)
         : kind == 3 ? (ta.pressed ? S.panel-hi : transparent)
         : (ta.pressed ? S.line : S.panel-hi);
-    border-width: kind == 3 ? 0px : 1px;
-    border-color: disabled ? S.line : kind == 0 ? transparent : kind == 2 ? S.bad.with-alpha(0.55) : S.line-hi;
+    // Fills only; the negative kind alone has an edge, so it never passes for a plain choice.
+    border-width: kind == 2 && !disabled ? 1px : 0px;
+    border-color: S.bad.with-alpha(0.55);
     animate background { duration: 90ms; }
     Text {
         x: S.s6;
@@ -199,7 +213,7 @@ export component Btn inherits Rectangle {
         text: root.text;
         color: root.disabled ? S.faint : root.kind == 0 ? S.on-accent : root.kind == 2 ? S.bad : root.kind == 3 ? S.accent-text : S.text;
         font-family: S.sans;
-        font-size: root.button-height < S.btn-h ? 16px : S.t-button;
+        font-size: root.button-height < S.btn-h ? 16px : 17px;
         font-weight: 700;
         horizontal-alignment: center;
         vertical-alignment: center;
@@ -218,11 +232,11 @@ export component IconBtn inherits Rectangle {
     in property <image> icon;
     in property <length> size: 40px;
     in property <length> icon-size: 22px;
-    in property <bool> outlined: true;
+    in property <bool> outlined: false;
     callback clicked();
     width: size;
     height: size;
-    border-radius: size / 2;
+    border-radius: S.r-lg;
     background: ta.pressed ? S.panel-hi : transparent;
     border-width: outlined ? 1.5px : 0px;
     border-color: S.line-hi;
@@ -249,8 +263,8 @@ export component Chip inherits Rectangle {
     in property <color> tone: S.accent-text;
     callback clicked();
     height: 44px;
-    width: t.preferred-width + 32px;
-    border-radius: 22px;
+    width: t.preferred-width + 28px;
+    border-radius: S.r-md;
     background: ta.pressed ? tone.with-alpha(0.25) : tone.with-alpha(0.10);
     border-width: 1px;
     border-color: tone.with-alpha(0.5);
@@ -324,8 +338,8 @@ export component Header inherits Rectangle {
             x: 12px;
             width: 40px;
             height: 40px;
-            border-radius: 20px;
-            background: back-ta.pressed ? S.panel-hi : transparent;
+            border-radius: S.r-lg;
+            background: back-ta.pressed ? S.panel : transparent;
             BackIcon {
                 width: 26px;
                 height: 26px;
@@ -396,7 +410,6 @@ export component Field inherits VerticalLayout {
     forward-focus: input;
     spacing: S.s2;
     if root.label != "": HorizontalLayout {
-        padding-left: S.s4;
         Text {
             text: root.label;
             color: S.muted;
@@ -408,7 +421,7 @@ export component Field inherits VerticalLayout {
     Rectangle {
         height: S.field-h;
         background: S.panel;
-        border-radius: S.r-xl;
+        border-radius: S.r-lg;
         border-width: input.has-focus || root.error != "" ? 2px : 1px;
         border-color: root.error != "" ? S.bad : input.has-focus ? S.accent : S.line-hi;
         clip: true;
@@ -464,8 +477,6 @@ export component Field inherits VerticalLayout {
         }
     }
     if root.error != "" || root.hint != "": HorizontalLayout {
-        padding-left: S.s4;
-        padding-right: S.s4;
         Text {
             text: root.error != "" ? root.error : root.hint;
             color: root.error != "" ? S.bad : S.faint;
@@ -483,7 +494,7 @@ export component QrBox inherits Rectangle {
     width: size;
     height: size;
     background: white;
-    border-radius: S.r-xl;
+    border-radius: S.r-sm;
     border-width: S.dark ? 0px : 1px;
     border-color: S.line;
     Image {
@@ -520,7 +531,7 @@ export component MessageField inherits Rectangle {
     }
     height: max(S.btn-h-sm + 4px, shown + 2 * pad-y);
     background: S.panel;
-    border-radius: 26px;
+    border-radius: S.r-lg;
     border-width: ti.has-focus ? 2px : 1px;
     border-color: ti.has-focus ? S.accent : S.line-hi;
     clip: true;
@@ -654,36 +665,19 @@ export component Toggle inherits Rectangle {
     }
 }
 
-// Empty state: circled icon, heading, one sentence.
+// Empty state: a heading and one sentence. (`icon` is kept for callers; it is not drawn.)
 export component EmptyState inherits VerticalLayout {
     in property <image> icon;
     in property <string> title;
     in property <string> body;
-    spacing: S.s4;
+    spacing: S.s3;
     alignment: start;
-    HorizontalLayout {
-        alignment: center;
-        Rectangle {
-            width: 96px;
-            height: 96px;
-            border-radius: 48px;
-            background: S.accent-soft;
-            border-width: 1px;
-            border-color: S.accent.with-alpha(0.35);
-            Image {
-                width: 44px;
-                height: 44px;
-                source: root.icon;
-                image-fit: contain;
-            }
-        }
-    }
     Text {
         text: root.title;
         color: S.text;
         font-family: S.sans;
-        font-size: S.t-title-lg;
-        font-weight: 800;
+        font-size: S.t-title;
+        font-weight: 700;
         horizontal-alignment: center;
         wrap: word-wrap;
     }
@@ -709,38 +703,21 @@ export component ConfirmModal inherits Rectangle {
     background: S.overlay;
     TouchArea { }
     Rectangle {
-        width: min(424px, root.width - 2 * S.s6);
+        width: min(432px, root.width - 2 * S.s6);
         height: lay.preferred-height;
-        background: S.panel;
-        border-radius: S.r-xl;
-        border-width: S.dark ? 1px : 0px;
-        border-color: S.line;
-        drop-shadow-blur: 24px;
-        drop-shadow-color: #00000066;
+        background: S.bg;
+        border-radius: S.r-lg;
+        border-width: 1px;
+        border-color: S.line-hi;
         lay := VerticalLayout {
             padding: S.s6;
-            spacing: S.s4;
-            HorizontalLayout {
-                alignment: center;
-                Rectangle {
-                    width: 72px;
-                    height: 72px;
-                    border-radius: 36px;
-                    background: (root.critical ? S.bad : S.warn).with-alpha(0.14);
-                    StateIcon {
-                        width: 40px;
-                        height: 40px;
-                        kind: root.critical ? 2 : 1;
-                    }
-                }
-            }
+            spacing: S.s3;
             Text {
                 text: root.title;
-                color: S.text;
+                color: root.critical ? S.bad : S.text;
                 font-family: S.sans;
                 font-size: S.t-title;
                 font-weight: 700;
-                horizontal-alignment: center;
                 wrap: word-wrap;
             }
             Text {
@@ -748,11 +725,10 @@ export component ConfirmModal inherits Rectangle {
                 color: S.muted;
                 font-family: S.sans;
                 font-size: 15px;
-                horizontal-alignment: center;
                 wrap: word-wrap;
             }
             Rectangle {
-                height: S.s1;
+                height: S.s3;
             }
             Btn {
                 text: root.confirm-label;
@@ -777,15 +753,15 @@ component ReactionPill inherits Rectangle {
     in property <ReactionRow> r;
     height: 28px;
     width: lay.preferred-width + 4px;
-    border-radius: 14px;
+    border-radius: S.r-md + 2px;
     background: S.bg;
     Rectangle {
         x: 2px;
         y: 2px;
         width: parent.width - 4px;
         height: parent.height - 4px;
-        border-radius: 12px;
-        background: root.r.mine ? (S.dark ? #2c1d47 : #ecdffb) : S.panel;
+        border-radius: S.r-md;
+        background: root.r.mine ? S.accent-soft : S.panel;
         border-width: 1px;
         border-color: root.r.mine ? S.accent.with-alpha(0.7) : S.line-hi;
         lay := HorizontalLayout {
@@ -838,11 +814,17 @@ export component Bubble inherits Rectangle {
     property <length> quote-w: max(qa-m.preferred-width, qt-m.preferred-width) + 24px;
     property <length> inner: min(widest, max(has-text ? text-m.preferred-width : 0px, meta-m.preferred-width + (photo-only ? 12px : 0px) + (m.sent ? 19px : 0px), m.group ? 90px : 0px, m.reply ? max(150px, quote-w) : 0px, m.media == 5 ? pic-dw : m.media != 0 ? 236px : 0px));
     property <bool> blink;
+    // Runs: bubbles of one run sit 3 px apart (the list spacing); a new run starts 9 px lower.
+    property <length> gap: m.run-start ? 9px : 0px;
+    // The corner on the sender's side: round only at the top of a run, a small "tail" at the
+    // bottom of every bubble.
+    property <length> r-top: m.run-start ? S.r-bubble : S.r-tail;
+    property <length> r-tail: S.r-tail;
     // Take the list's width; never push it wider (the measuring Texts are long single lines).
     min-width: 0px;
     preferred-width: 0px;
     horizontal-stretch: 1;
-    height: body.height + (m.reactions.length > 0 ? 22px : 0px);
+    height: gap + body.height + (m.reactions.length > 0 ? 22px : 0px);
 
     text-m := Text {
         visible: false;
@@ -888,21 +870,27 @@ export component Bubble inherits Rectangle {
 
     if root.selected: Rectangle {
         x: body.x - 4px;
-        y: -4px;
+        y: root.gap - 4px;
         width: body.width + 8px;
         height: body.height + 8px;
-        border-radius: S.r-bubble + 4px;
+        border-top-left-radius: (root.m.out ? S.r-bubble : root.r-top) + 4px;
+        border-top-right-radius: (root.m.out ? root.r-top : S.r-bubble) + 4px;
+        border-bottom-left-radius: (root.m.out ? S.r-bubble : root.r-tail) + 4px;
+        border-bottom-right-radius: (root.m.out ? root.r-tail : S.r-bubble) + 4px;
         border-width: 2px;
         border-color: S.accent-text;
     }
 
     body := Rectangle {
         x: root.m.out ? root.width - self.width : 0px;
-        y: 0px;
+        y: root.gap;
         width: root.inner + 2 * root.pad;
         height: lay.preferred-height;
         background: root.m.out ? (ta.pressed ? S.fill-pressed : S.bubble-out) : (ta.pressed ? S.panel-hi : S.bubble-in);
-        border-radius: S.r-bubble;
+        border-top-left-radius: root.m.out ? S.r-bubble : root.r-top;
+        border-top-right-radius: root.m.out ? root.r-top : S.r-bubble;
+        border-bottom-left-radius: root.m.out ? S.r-bubble : root.r-tail;
+        border-bottom-right-radius: root.m.out ? root.r-tail : S.r-bubble;
         // A failed outgoing message gets a red outline too, not just a paler status line.
         border-width: root.m.out ? (root.m.failed ? 2px : 0px) : 1px;
         border-color: root.m.failed ? S.bad : S.bubble-in-line;
@@ -1027,7 +1015,7 @@ export component Bubble inherits Rectangle {
                     y: parent.height - self.height - 8px;
                     height: 22px;
                     width: kept-t.preferred-width + 30px;
-                    border-radius: 11px;
+                    border-radius: S.r-sm;
                     background: #000000a6;
                     LockIcon {
                         x: 8px;
@@ -1085,7 +1073,7 @@ export component Bubble inherits Rectangle {
     // Reactions hang over the bubble's bottom edge.
     if root.m.reactions.length > 0: HorizontalLayout {
         x: 0px;
-        y: body.height - 6px;
+        y: root.gap + body.height - 6px;
         width: root.width;
         height: 28px;
         padding-left: 10px;

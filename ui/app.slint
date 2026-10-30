@@ -15,7 +15,7 @@ export { Theme, Images, App, Actions, Utils, Confirm, ChatRow, MsgRow, ContactRo
 export { S as Palette }
 
 export component AppWindow inherits Window {
-    title: "Sanctum";
+    title: "Sanctm";
     preferred-width: UISize.screen-width;
     preferred-height: UISize.screen-height;
     background: S.bg;
@@ -81,17 +81,13 @@ export component AppWindow inherits Window {
         y: App.page == Pages.thread ? Overlay.thread-dock-top - S.s3 - self.height : App.page == Pages.picture ? S.top-inset + S.header-h + S.s3 : parent.height - S.s6 - self.height;
         width: parent.width - 2 * S.gutter;
         height: toast-text.preferred-height + 2 * S.s3;
-        background: S.panel;
-        border-radius: S.r-md;
-        border-width: 1px;
-        border-color: S.accent.with-alpha(0.6);
-        drop-shadow-blur: 14px;
-        drop-shadow-color: #00000040;
+        background: S.panel-hi;
+        border-radius: S.r-lg;
         toast-text := Text {
             x: S.s4;
             width: parent.width - 2 * S.s4;
             text: App.toast;
-            color: S.accent-text;
+            color: S.text;
             font-family: S.sans;
             font-size: S.t-small;
             font-weight: 600;

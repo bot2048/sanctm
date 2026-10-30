@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Sanctum: private Nostr messages (NIP-17) written and read on Passport Prime.
+//! Sanctm: private Nostr messages (NIP-17) written and read on Passport Prime.
 //!
 //! The key lives here (derived from the KeyOS app seed, or imported); sealing, gift wrapping,
 //! unwrapping and verifying happen here. The companion on the phone only moves signed gift
@@ -34,7 +34,7 @@ use slint_keyos_platform::slint::{
     Color, ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel, Weak,
 };
 
-app_ui2!("Sanctum");
+app_ui2!("Sanctm");
 
 const SIM: bool = cfg!(not(target_os = "xous"));
 
@@ -186,6 +186,9 @@ fn plural(n: usize, one: &str, many: &str) -> String { format!("{n} {}", if n ==
 
 /// A failed message can be sent again by hand only while a phone is linked (it also goes out
 /// by itself on the next link).
+/// Messages from the same side closer than this (seconds) are drawn as one run of bubbles.
+const RUN_GAP: u64 = 300;
+
 fn status_meta(now: u64, m: &Message, linked: bool) -> (String, bool) {
     let when = ago(now, m.at);
     if !m.out {
@@ -379,7 +382,7 @@ fn refresh_status(ui: &AppWindow, st: &State) {
     app.set_link_up(st.link_up);
     refresh_accounts(ui, st);
     let Some(s) = st.session.as_ref() else {
-        app.set_link_title(if st.link_up { "PHONE LINKED".into() } else { "NO PHONE".into() });
+        app.set_link_title(if st.link_up { "Phone linked".into() } else { "No phone".into() });
         app.set_link_detail(st.link_text.as_str().into());
         return;
     };
@@ -390,11 +393,11 @@ fn refresh_status(ui: &AppWindow, st: &State) {
     app.set_synced(s.synced);
     let no_relay = st.link_up && s.relays_total > 0 && s.relays_up == 0;
     let title = match (st.link_up, s.synced) {
-        (true, _) if no_relay => "NO RELAYS",
-        (true, true) => "PHONE LINKED",
-        (true, false) => "SYNCING",
-        (false, _) if SIM => "NO PHONE",
-        (false, _) => "OFFLINE",
+        (true, _) if no_relay => "No relays",
+        (true, true) => "Phone linked",
+        (true, false) => "Syncing",
+        (false, _) if SIM => "No phone",
+        (false, _) => "Offline",
     };
     app.set_link_title(title.into());
     let detail = if st.link_up {
@@ -616,7 +619,7 @@ fn msg_row(st: &State, s: &Session, peer: &PublicKey, m: &Message, now: u64) -> 
             Some(Pic::Loading) if kind == 3 => (4, "Loading picture…".into(), "Your phone fetches it".into(), icon),
             Some(Pic::Loading) => (4, "Opening on Passport…".into(), "Your phone fetches the sealed file".into(), icon),
             Some(Pic::Failed(e)) => (6, format!("{label} did not open"), format!("{} Tap to try again.", sentence(e)), "retry"),
-            None if kept => (kind, "Kept in Sanctum".into(), "Tap to show".into(), "photo"),
+            None if kept => (kind, "Kept in Sanctm".into(), "Tap to show".into(), "photo"),
             None => (kind, title.to_string(), detail.to_string(), icon),
         };
         row.media = media;
@@ -648,7 +651,19 @@ fn refresh_thread(ui: &AppWindow, st: &State) {
     let rows: Vec<MsgRow> = s
         .inbox
         .chat(&peer.to_hex())
-        .map(|c| c.messages.iter().map(|m| msg_row(st, s, &peer, m, now)).collect())
+        .map(|c| {
+            let mut prev: Option<&Message> = None;
+            c.messages
+                .iter()
+                .map(|m| {
+                    let mut row = msg_row(st, s, &peer, m, now);
+                    // Same side, same kind, under 5 minutes apart: one run of bubbles.
+                    row.run_start = !prev.is_some_and(|p| p.out == m.out && p.group == m.group && m.at.saturating_sub(p.at) < RUN_GAP);
+                    prev = Some(m);
+                    row
+                })
+                .collect()
+        })
         .unwrap_or_default();
     app.set_messages(ModelRc::new(VecModel::from(rows)));
     refresh_selection(ui, st);
@@ -985,7 +1000,7 @@ fn identity_of(seed: &[u8; 32], slot: u32, p: &store::Profile) -> Result<Identit
     }
 }
 
-/// The account list, built on first run from the slots Sanctum used before it had one
+/// The account list, built on first run from the slots Sanctm used before it had one
 /// (`profile-0.json`, and `profile-1.json` from the simulator's second persona).
 fn read_accounts(st: &mut State) -> Result<store::Accounts, String> {
     if let Some(a) = st.store.load_accounts()? {
@@ -1040,7 +1055,7 @@ fn start(ui: &AppWindow, st: &mut State) {
             st.accounts_unreadable = true;
             st.session = None;
             refresh_status(ui, st);
-            show_error(ui, "Storage problem", &format!("This Passport could not read the Sanctum account list: {e}"), false);
+            show_error(ui, "Storage problem", &format!("This Passport could not read the Sanctm account list: {e}"), false);
             ui.global::<App>().set_error_retry(true);
             return;
         }
@@ -1096,7 +1111,7 @@ fn load_account(ui: &AppWindow, st: &mut State, slot: u32, ready: Option<Identit
         }
         Err(e) => {
             refresh_status(ui, st);
-            show_error(ui, "Storage problem", &format!("This Passport could not read the Sanctum profile: {e}"), false);
+            show_error(ui, "Storage problem", &format!("This Passport could not read the Sanctm profile: {e}"), false);
             app.set_error_retry(true);
             return;
         }
@@ -1123,13 +1138,13 @@ fn load_account(ui: &AppWindow, st: &mut State, slot: u32, ready: Option<Identit
     let contacts = st.store.load_contacts(&id).unwrap_or_else(|e| {
         log::error!("storage: {e}");
         st.contacts_unreadable = true;
-        st.storage_note = "Saved contacts could not be read. They are left untouched; new ones are not saved until Sanctum restarts.".into();
+        st.storage_note = "Saved contacts could not be read. They are left untouched; new ones are not saved until Sanctm restarts.".into();
         Vec::new()
     });
     let inbox = st.store.load_inbox(&id).unwrap_or_else(|e| {
         log::error!("storage: {e}");
         st.inbox_unreadable = true;
-        st.storage_note = "Saved chats could not be read. They are left untouched; new messages are not saved until Sanctum restarts.".into();
+        st.storage_note = "Saved chats could not be read. They are left untouched; new messages are not saved until Sanctm restarts.".into();
         Default::default()
     });
     // Profiles are a cache: unreadable means fetched again, but the file is left alone.
@@ -1752,7 +1767,7 @@ fn keep_picture(ui: &AppWindow, st: &mut State, msg: &str) {
     } else {
         // The picture page says it under Save; elsewhere (the message actions) a toast does.
         if ui.global::<App>().get_page() != PAGE_PICTURE {
-            toast(ui, "Kept in Sanctum, sealed. It shows without the phone.");
+            toast(ui, "Kept in Sanctm, sealed. It shows without the phone.");
         }
     }
 }
@@ -1794,7 +1809,7 @@ fn save_picture_copy(ui: &AppWindow, msg: &str) {
             Ok(png) => {
                 let (day, time) = utc_stamp(now);
                 let short: String = msg.chars().take(8).collect();
-                job = Some((png, format!("sanctum-{day}-{time}-{short}.png")));
+                job = Some((png, format!("sanctm-{day}-{time}-{short}.png")));
             }
             Err(e) => toast(ui, &format!("Not saved: {}", sentence(&e.to_string()))),
         }
@@ -1861,7 +1876,7 @@ fn boot(ui: &AppWindow, fs: std::sync::Arc<FileSystem>) {
     let seed = match device::app_seed() {
         Ok(seed) => seed,
         Err(e) => {
-            show_error(ui, "Sanctum cannot start", &e, false);
+            show_error(ui, "Sanctm cannot start", &e, false);
             return;
         }
     };
@@ -1951,7 +1966,7 @@ fn boot(ui: &AppWindow, fs: std::sync::Arc<FileSystem>) {
 fn app_main(cx: AppContext, ui: AppWindow) {
     log_server::init_wait(env!("CARGO_CRATE_NAME")).unwrap();
     log::set_max_level(log::LevelFilter::Info);
-    log::info!("Sanctum starting");
+    log::info!("Sanctm starting");
 
     theme::init(&ui);
     // http://localhost picture links: only the simulator's local test servers use them.
@@ -2218,7 +2233,7 @@ fn app_main(cx: AppContext, ui: AppWindow) {
     actions.on_forget_picture(|id| with_app(|ui, st| forget_picture(ui, st, &id)));
 
     // Launcher QR hand-off: an npub scanned from the Launcher opens a new chat with it. One
-    // that arrives while Sanctum is still starting (or before it has an account) waits.
+    // that arrives while Sanctm is still starting (or before it has an account) waits.
     let gui = cx.gui.clone();
     cx.set_input_handler(move |input| {
         if input.msg != InputMessage::NavigationFocused {

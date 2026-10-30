@@ -17,8 +17,8 @@ component ThreadHeader inherits Rectangle {
             x: 8px;
             width: 40px;
             height: 40px;
-            border-radius: 20px;
-            background: back-ta.pressed ? S.panel-hi : transparent;
+            border-radius: S.r-lg;
+            background: back-ta.pressed ? S.panel : transparent;
             BackIcon {
                 width: 26px;
                 height: 26px;
@@ -99,10 +99,10 @@ component ReactButton inherits Rectangle {
     callback clicked();
     width: 56px;
     height: 56px;
-    border-radius: 18px;
-    background: ta.pressed ? S.line : root.mine ? S.accent-soft : S.panel-hi;
-    border-width: root.mine ? 2px : 1px;
-    border-color: root.mine ? S.accent : S.line;
+    border-radius: S.r-lg;
+    background: ta.pressed ? S.panel-hi : root.mine ? S.accent-soft : S.panel;
+    border-width: root.mine ? 2px : 0px;
+    border-color: S.accent;
     EmojiIcon {
         key: root.key;
         width: 30px;
@@ -145,7 +145,7 @@ export component ThreadPage inherits Rectangle {
                 padding-bottom: S.s2;
                 spacing: S.s3;
                 Text {
-                    text: "Not in your contacts. Check who this is first.";
+                    text: "Not in your contacts. Check their npub before you trust a name.";
                     color: S.warn;
                     font-family: S.sans;
                     font-size: 13px;
@@ -154,7 +154,7 @@ export component ThreadPage inherits Rectangle {
                     horizontal-stretch: 1;
                 }
                 Chip {
-                    text: "Save";
+                    text: "Add contact";
                     tone: S.warn;
                     clicked => {
                         Actions.open-contact(App.thread-peer);
@@ -189,7 +189,7 @@ export component ThreadPage inherits Rectangle {
                 padding-right: S.list-inset;
                 padding-top: S.list-inset;
                 padding-bottom: S.list-inset;
-                spacing: 10px;
+                spacing: 3px;
                 alignment: App.messages.length == 0 ? center : end;
                 if App.messages.length == 0: VerticalLayout {
                     padding-left: S.s4;
@@ -198,7 +198,36 @@ export component ThreadPage inherits Rectangle {
                     EmptyState {
                         icon: Images.image("lock-p");
                         title: "Say hi";
-                        body: "Messages are sealed on this Passport. Only the two of you can read them.";
+                        body: "Messages are sealed on this Passport. Only the two of you can read them. Tap a message to react or reply.";
+                    }
+                }
+                // What protects this conversation, once, above its first message.
+                if App.messages.length > 0: HorizontalLayout {
+                    alignment: center;
+                    padding-bottom: S.s2;
+                    Rectangle {
+                        height: 24px;
+                        width: seal.preferred-width + 2 * S.s3;
+                        seal := HorizontalLayout {
+                            x: S.s3;
+                            width: parent.width - 2 * S.s3;
+                            spacing: 6px;
+                            alignment: center;
+                            VerticalLayout {
+                                alignment: center;
+                                LockIcon {
+                                    width: 13px;
+                                    height: 13px;
+                                }
+                            }
+                            Text {
+                                text: "Sealed on this Passport with NIP-17";
+                                color: S.faint;
+                                font-family: S.sans;
+                                font-size: S.t-meta;
+                                vertical-alignment: center;
+                            }
+                        }
                     }
                 }
                 for m in App.messages: Bubble {
@@ -253,10 +282,8 @@ export component ThreadPage inherits Rectangle {
                 Rectangle {
                     horizontal-stretch: 1;
                     height: 56px;
-                    border-radius: 18px;
-                    background: reply-ta.pressed ? S.line : S.panel-hi;
-                    border-width: 1px;
-                    border-color: S.line-hi;
+                    border-radius: S.r-lg;
+                    background: reply-ta.pressed ? S.panel-hi : S.panel;
                     HorizontalLayout {
                         alignment: center;
                         spacing: 6px;
@@ -292,7 +319,7 @@ export component ThreadPage inherits Rectangle {
                 }
             }
             if App.selected-can-keep: Btn {
-                text: "Keep picture in Sanctum";
+                text: "Keep picture in Sanctm";
                 kind: 1;
                 button-height: S.btn-h-sm;
                 clicked => {
@@ -333,8 +360,8 @@ export component ThreadPage inherits Rectangle {
             // Replying: the quoted message, which can be dropped.
             if App.replying: Rectangle {
                 height: max(52px, rq.preferred-height);
-                background: S.panel-hi;
-                border-radius: S.r-md;
+                background: S.panel;
+                border-radius: S.r-lg;
                 Rectangle {
                     x: 0px;
                     y: 8px;
@@ -393,10 +420,8 @@ export component ThreadPage inherits Rectangle {
                     Rectangle {
                         width: 52px;
                         height: 52px;
-                        border-radius: 26px;
-                        background: send-ta.pressed ? S.fill-pressed : root.can-send ? S.fill : S.panel-hi;
-                        border-width: root.can-send ? 0px : 1px;
-                        border-color: S.line;
+                        border-radius: S.r-lg;
+                        background: send-ta.pressed ? S.fill-pressed : root.can-send ? S.fill : S.panel;
                         animate background { duration: 120ms; }
                         Image {
                             width: 24px;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { S, App, Actions, Pages } from "../state.slint";
-import { Logo, Header, Body, Panel, Btn, LockIcon, Field } from "../widgets.slint";
+import { Logo, Header, Body, Panel, Btn, Field, Section } from "../widgets.slint";
 
 export component LoadingPage inherits Rectangle {
     background: S.bg;
@@ -25,16 +25,17 @@ export component LoadingPage inherits Rectangle {
     }
 }
 
-component Promise inherits HorizontalLayout {
+// One numbered line of "How it works".
+component Step inherits HorizontalLayout {
+    in property <string> n;
     in property <string> text;
     spacing: S.s3;
-    VerticalLayout {
-        alignment: start;
-        padding-top: 1px;
-        LockIcon {
-            width: 22px;
-            height: 22px;
-        }
+    Text {
+        width: 20px;
+        text: root.n;
+        color: S.accent-text;
+        font-family: S.mono;
+        font-size: S.t-body;
     }
     Body {
         font-size: 15px;
@@ -44,51 +45,56 @@ component Promise inherits HorizontalLayout {
 
 export component OnboardingPage inherits Rectangle {
     background: S.bg;
+    property <length> actions-h: 2 * S.btn-h + S.s3 + S.s3 + 28px;
     Flickable {
         y: S.top-inset;
-        height: parent.height - S.top-inset - 176px;
+        height: parent.height - S.top-inset - root.actions-h;
         VerticalLayout {
             padding-left: S.gutter;
             padding-right: S.gutter;
             padding-top: S.s8;
             padding-bottom: S.s4;
-            spacing: S.s5;
+            spacing: S.s4;
             alignment: start;
             HorizontalLayout {
-                alignment: center;
                 Logo {
-                    width: 92px;
-                    height: 92px;
+                    width: 56px;
+                    height: 56px;
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
                 }
             }
             VerticalLayout {
                 spacing: S.s2;
                 Text {
-                    text: "SANCTUM";
+                    text: "Sanctm";
                     color: S.text;
                     font-family: S.sans;
-                    font-size: S.t-display;
-                    font-weight: 800;
-                    letter-spacing: 8px;
-                    horizontal-alignment: center;
+                    font-size: 34px;
+                    font-weight: 700;
                 }
                 Text {
-                    text: "Nostr DMs, written and read on Passport.";
-                    color: S.accent-text;
+                    text: "Private Nostr messages, written and read on your Passport.";
+                    color: S.muted;
                     font-family: S.sans;
-                    font-size: S.t-body;
-                    font-weight: 600;
-                    horizontal-alignment: center;
+                    font-size: 17px;
                     wrap: word-wrap;
                 }
             }
-            Panel {
-                inner-spacing: S.s4;
-                Promise {
-                    text: "Your Nostr key is derived from this Passport's seed and never leaves it.";
+            Section {
+                title: "How it works";
+                Step {
+                    n: "1";
+                    text: "Your Nostr key is made from this Passport's seed and never leaves it.";
                 }
-                Promise {
-                    text: "Your phone only carries sealed, gift-wrapped envelopes (NIP-17) to relays. It never sees a word you write, or who wrote to you.";
+                Step {
+                    n: "2";
+                    text: "You write and read every message here. Each one is sealed on the Passport (NIP-17).";
+                }
+                Step {
+                    n: "3";
+                    text: "Your phone only carries the sealed gift wraps to Nostr relays. It never sees a word, or who wrote to you.";
                 }
             }
             if App.seed-note != "": Text {
@@ -97,26 +103,25 @@ export component OnboardingPage inherits Rectangle {
                 font-family: S.sans;
                 font-size: 13px;
                 wrap: word-wrap;
-                horizontal-alignment: center;
             }
         }
     }
     VerticalLayout {
-        y: parent.height - 176px;
-        height: 176px;
+        y: parent.height - root.actions-h;
+        height: root.actions-h;
         padding-left: S.gutter;
         padding-right: S.gutter;
         padding-top: S.s3;
         padding-bottom: 28px;
-        spacing: S.s4;
+        spacing: S.s3;
         Btn {
-            text: "Create my Nostr identity";
+            text: "Create my Nostr account";
             clicked => {
                 Actions.create-identity();
             }
         }
         Btn {
-            text: "I already have a Nostr account";
+            text: "I already have a Nostr key";
             kind: 1;
             clicked => {
                 Actions.start-import();
@@ -169,13 +174,14 @@ export component ImportPage inherits Rectangle {
                 padding-bottom: S.gutter + root.keyboard;
                 spacing: S.s4;
                 alignment: start;
-                Panel {
-                    accent: S.warn.with-alpha(0.6);
-                    Body {
-                        font-size: 15px;
-                        color: S.warn;
-                        text: "Bring your npub, followers and DMs with you. One catch: a key you used in other apps is already exposed on those devices. A key created on Passport never was.";
-                    }
+                Body {
+                    font-size: 15px;
+                    text: "Bring your npub, followers and DMs with you.";
+                }
+                Body {
+                    font-size: 15px;
+                    color: S.warn;
+                    text: "One catch: a key you used in other apps is already exposed on those devices. A key created on Passport never was.";
                 }
                 Btn {
                     text: "Scan nsec QR";

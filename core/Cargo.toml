@@ -2,7 +2,7 @@
 name = "nip-ping-core"
 version = "0.1.0"
 edition = "2021"
-description = "Sanctum for Passport Prime: keys, NIP-01 events, NIP-19, NIP-44 v2, NIP-59 gift wrap, NIP-17 private DMs, link protocol, inbox"
+description = "Sanctm for Passport Prime: keys, NIP-01 events, NIP-19, NIP-44 v2, NIP-59 gift wrap, NIP-17 private DMs, link protocol, inbox"
 license = "GPL-3.0-or-later"
 publish = false
 
