@@ -508,15 +508,13 @@ export component QrBox inherits Rectangle {
 
 // The thread's message field: one line, growing to `max-lines`, then scrolling to the cursor
 // (the SDK TextArea's approach). The focused field brings up the KeyOS keyboard; the page
-// lifts it above the keyboard.
+// lifts it above the keyboard. The keyboard's accept key says Enter and starts a new line (it
+// arrives as Return); tapping the conversation puts the keyboard away.
 export component MessageField inherits Rectangle {
     in-out property <string> value;
     in property <string> placeholder;
     in property <int> max-lines: 4;
     out property <bool> has-focus: ti.has-focus;
-    // The KeyOS keyboard's Done key sends Return: it closes the keyboard here, it does not
-    // start a new line.
-    callback done();
     property <length> pad-x: 18px;
     property <length> pad-y: 14px;
     property <length> content-w: max(0px, root.width - 2 * pad-x);
@@ -563,45 +561,34 @@ export component MessageField inherits Rectangle {
         font-size: S.t-bubble;
         overflow: elide;
     }
-    FocusScope {
-        focus-on-click: false;
-        focus-on-tab-navigation: false;
-        capture-key-pressed(e) => {
-            if e.text == Key.Return && !e.modifiers.shift {
-                root.done();
-                return accept;
-            }
-            reject
-        }
-        sc := Flickable {
-            x: root.pad-x;
-            y: root.pad-y;
-            width: root.content-w;
-            height: root.shown;
-            viewport-width: self.width;
-            viewport-height: max(root.shown, root.natural);
-            ti := TextInput {
-                width: parent.width;
-                height: max(root.shown, root.natural);
-                text <=> root.value;
-                color: S.text;
-                font-family: S.sans;
-                font-size: S.t-bubble;
-                single-line: false;
-                wrap: word-wrap;
-                vertical-alignment: top;
-                accept-button-text: "Done";
-                caps-mode: CapsMode.sentences;
-                selection-background-color: S.accent-soft;
-                selection-foreground-color: S.text;
-                cursor-position-changed(cpos) => {
-                    if (cpos.y + sc.viewport-y < 0px) {
-                        sc.viewport-y = min(0px, max(sc.height - self.height, -cpos.y));
-                    } else if (cpos.y + sc.viewport-y > sc.height - root.line-h) {
-                        sc.viewport-y = min(0px, max(sc.height - self.height, sc.height - cpos.y - root.line-h));
-                    }
-                    sc.viewport-x = 0px;
+    sc := Flickable {
+        x: root.pad-x;
+        y: root.pad-y;
+        width: root.content-w;
+        height: root.shown;
+        viewport-width: self.width;
+        viewport-height: max(root.shown, root.natural);
+        ti := TextInput {
+            width: parent.width;
+            height: max(root.shown, root.natural);
+            text <=> root.value;
+            color: S.text;
+            font-family: S.sans;
+            font-size: S.t-bubble;
+            single-line: false;
+            wrap: word-wrap;
+            vertical-alignment: top;
+            accept-button-text: "Enter";
+            caps-mode: CapsMode.sentences;
+            selection-background-color: S.accent-soft;
+            selection-foreground-color: S.text;
+            cursor-position-changed(cpos) => {
+                if (cpos.y + sc.viewport-y < 0px) {
+                    sc.viewport-y = min(0px, max(sc.height - self.height, -cpos.y));
+                } else if (cpos.y + sc.viewport-y > sc.height - root.line-h) {
+                    sc.viewport-y = min(0px, max(sc.height - self.height, sc.height - cpos.y - root.line-h));
                 }
+                sc.viewport-x = 0px;
             }
         }
     }

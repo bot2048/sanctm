@@ -411,9 +411,6 @@ export component ThreadPage inherits Rectangle {
                     horizontal-stretch: 1;
                     value <=> App.compose-text;
                     placeholder: App.replying ? "Reply…" : "Message…";
-                    done => {
-                        field.drop-focus();
-                    }
                 }
                 VerticalLayout {
                     alignment: end;

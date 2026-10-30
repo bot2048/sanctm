@@ -116,8 +116,9 @@ cards inside them darken the purple (#0000002e) so every line stays above 4.5:1.
 * **Composer** (thread bottom): 52 px field (radius 8) growing to 4 lines, then scrolling to
   the cursor; 52 px send button (`fill`, or `panel` with a muted arrow when there is nothing to
   send). Above it, only when needed: the reply quote with an x, one small line for "no phone
-  linked" or an error, the byte counter past 1800. The KeyOS keyboard is an overlay covering
-  the bottom 306 px; the platform reports it in `Window.virtual-keyboard-size`, and the thread
+  linked" or an error, the byte counter past 1800. The keyboard's accept key says Enter and
+  starts a new line; tapping the conversation puts the keyboard away. The KeyOS keyboard is an
+  overlay covering the bottom 306 px; the platform reports it in `Window.virtual-keyboard-size`, and the thread
   lifts the composer by that much.
 * **Empty states**: a `t-title` heading and one sentence of `muted` body, centred; the calls to
   action are the page's bottom buttons.
