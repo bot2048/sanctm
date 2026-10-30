@@ -1,0 +1,888 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import { Images } from "@ui/theme.slint";
+import { S, App, Actions, Pages, Confirm, ContactRow, AccountRow } from "../state.slint";
+import { Header, Eyebrow, Body, Mono, Panel, Pill, Badge, Btn, Chip, QrBox, Avatar, Field, Toggle, VerifiedIcon, BoltIcon, ChevronIcon, IconBtn } from "../widgets.slint";
+
+component ContactItem inherits Rectangle {
+    in property <ContactRow> person;
+    callback open();
+    height: 68px;
+    background: ta.pressed ? S.panel-hi : S.panel;
+    border-radius: S.r-lg;
+    border-width: 1px;
+    border-color: S.line;
+    ta := TouchArea {
+        clicked => {
+            root.open();
+        }
+    }
+    Avatar {
+        x: S.s4;
+        size: 40px;
+        initial: root.person.initial;
+        tint: root.person.tint;
+        picture: root.person.avatar;
+        has-picture: root.person.has-avatar;
+    }
+    VerticalLayout {
+        x: 70px;
+        width: parent.width - 86px;
+        alignment: center;
+        spacing: 2px;
+        Text {
+            text: root.person.name;
+            color: S.text;
+            font-family: S.sans;
+            font-size: S.t-row;
+            font-weight: 700;
+            overflow: elide;
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            if root.person.verified: VerticalLayout {
+                alignment: center;
+                VerifiedIcon {
+                    width: 12px;
+                    height: 12px;
+                }
+            }
+            Text {
+                text: root.person.npub;
+                color: S.muted;
+                font-family: root.person.verified ? S.sans : S.mono;
+                font-size: S.t-meta;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+}
+
+// NIP-05 address with the phone's verdict.
+component Nip05Line inherits HorizontalLayout {
+    in property <string> address;
+    in property <bool> verified;
+    in property <string> note: "verified by your phone";
+    in property <bool> centred: false;
+    spacing: 6px;
+    alignment: centred ? center : start;
+    if root.verified: VerticalLayout {
+        alignment: center;
+        VerifiedIcon {
+            width: 16px;
+            height: 16px;
+        }
+    }
+    Text {
+        text: root.address;
+        color: root.verified ? S.ok : S.muted;
+        font-family: S.sans;
+        font-size: S.t-small;
+        font-weight: 600;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    if root.verified && root.note != "": Text {
+        text: "· " + root.note;
+        color: S.faint;
+        font-family: S.sans;
+        font-size: S.t-meta;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+export component NewChatPage inherits Rectangle {
+    background: S.bg;
+    // Height of the KeyOS keyboard while it is up (the window is not resized): the page gets
+    // that much room at the bottom, and the focused field is scrolled above the keyboard.
+    in property <length> keyboard: 0px;
+    function reveal(top: length, bottom: length) {
+        let room = flick.height - root.keyboard - S.s4;
+        if bottom + flick.viewport-y > room {
+            flick.viewport-y = max(min(0px, flick.height - flick.viewport-height), room - bottom);
+        }
+        if top + flick.viewport-y < 0px {
+            flick.viewport-y = min(0px, -top);
+        }
+    }
+    property <bool> npub-focus: npub-field.has-focus;
+    property <bool> name-focus: name-field.has-focus;
+    function reveal-focused() {
+        if root.npub-focus {
+            root.reveal(npub-field.y, npub-field.y + npub-field.height);
+        } else if root.name-focus {
+            root.reveal(name-field.y, name-field.y + name-field.height);
+        }
+    }
+    changed npub-focus => {
+        root.reveal-focused();
+    }
+    changed name-focus => {
+        root.reveal-focused();
+    }
+    changed keyboard => {
+        root.reveal-focused();
+    }
+    // The card of who they are appears above the name field once a lookup ends (and an error
+    // line can appear under the npub), pushing the focused name field down under the keyboard:
+    // follow it.
+    property <length> name-bottom: name-field.y + name-field.height;
+    changed name-bottom => {
+        root.reveal-focused();
+    }
+    property <string> typed: App.new-npub;
+    changed typed => {
+        Actions.new-input(self.typed);
+    }
+    property <bool> needs-lookup: App.new-kind == 2 && !App.new-found;
+    VerticalLayout {
+        padding-top: S.top-inset;
+        Header {
+            title: "New chat";
+            back => {
+                Actions.go-home();
+            }
+        }
+        flick := Flickable {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: S.gutter;
+                // Room for the keyboard: a padding, not an `if` spacer, so the viewport height
+                // reveal() reads is already the new one.
+                padding-bottom: S.gutter + root.keyboard;
+                spacing: S.s4;
+                alignment: start;
+                Btn {
+                    text: "Scan their npub QR";
+                    kind: 1;
+                    clicked => {
+                        Actions.scan(0);
+                    }
+                }
+                npub-field := Field {
+                    label: "Their npub or name@domain";
+                    key-label: "Next";
+                    placeholder: "npub1… or alice@example.com";
+                    value <=> App.new-npub;
+                    mono: true;
+                    error: App.new-npub-error;
+                    hint: App.new-looking ? "Asking your phone to look it up…" : App.new-kind == 2 && !App.new-found ? "A Nostr address. Look it up to see whose key it is." : "";
+                    // Done: on to the name (looking up a name@domain address meanwhile).
+                    accepted => {
+                        if root.needs-lookup {
+                            Actions.lookup();
+                        }
+                        name-field.focus-input();
+                    }
+                }
+                // Who the field resolves to.
+                if App.new-found: Rectangle {
+                    height: card.preferred-height;
+                    background: S.panel;
+                    border-radius: S.r-lg;
+                    border-width: 1px;
+                    border-color: App.new-found-verified ? S.ok.with-alpha(0.45) : S.line;
+                    card := HorizontalLayout {
+                        padding: S.s4;
+                        spacing: 14px;
+                        VerticalLayout {
+                            alignment: center;
+                            Avatar {
+                                size: 56px;
+                                initial: App.new-found-initial;
+                                tint: App.new-found-tint;
+                                picture: App.new-found-avatar;
+                                has-picture: App.new-found-has-avatar;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 3px;
+                            horizontal-stretch: 1;
+                            if App.new-found-name != "": Text {
+                                text: App.new-found-name;
+                                color: S.text;
+                                font-family: S.sans;
+                                font-size: S.t-row;
+                                font-weight: 700;
+                                overflow: elide;
+                            }
+                            if App.new-found-nip05 != "": Nip05Line {
+                                address: App.new-found-nip05;
+                                verified: App.new-found-verified;
+                                note: "";
+                            }
+                            Text {
+                                text: App.new-found-npub;
+                                color: App.new-found-name == "" ? S.text : S.muted;
+                                font-family: S.mono;
+                                font-size: App.new-found-name == "" ? 15px : S.t-meta;
+                                overflow: elide;
+                            }
+                            if App.new-found-contact != "": Text {
+                                text: "Already in your contacts";
+                                color: S.accent-text;
+                                font-family: S.sans;
+                                font-size: S.t-meta;
+                                font-weight: 600;
+                            }
+                        }
+                    }
+                }
+                name-field := Field {
+                    label: "Your name for them (optional)";
+                    words: true;
+                    placeholder: "e.g. Satoshi";
+                    value <=> App.new-name;
+                    error: App.new-error;
+                    hint: "Kept on this Passport only.";
+                    // Done: put the keyboard away, so Start chat shows.
+                    accepted => {
+                        self.drop-focus();
+                    }
+                }
+                Btn {
+                    text: root.needs-lookup ? (App.new-looking ? "Looking up…" : "Look up") : "Start chat";
+                    disabled: App.new-kind == 0 || App.new-looking;
+                    clicked => {
+                        if root.needs-lookup {
+                            Actions.lookup();
+                        } else {
+                            Actions.add-chat(App.new-npub, App.new-name);
+                        }
+                    }
+                }
+                if App.contacts.length > 0: HorizontalLayout {
+                    padding-top: S.s2;
+                    Eyebrow {
+                        text: "CONTACTS · " + App.contacts.length;
+                    }
+                }
+                for c in App.contacts: ContactItem {
+                    person: c;
+                    open => {
+                        Actions.chat-with(c.hex);
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component ContactPage inherits Rectangle {
+    background: S.bg;
+    // Height of the KeyOS keyboard while it is up (the window is not resized): the page gets
+    // that much room at the bottom, and the focused field is scrolled above the keyboard.
+    in property <length> keyboard: 0px;
+    function reveal(top: length, bottom: length) {
+        let room = flick.height - root.keyboard - S.s4;
+        if bottom + flick.viewport-y > room {
+            flick.viewport-y = max(min(0px, flick.height - flick.viewport-height), room - bottom);
+        }
+        if top + flick.viewport-y < 0px {
+            flick.viewport-y = min(0px, -top);
+        }
+    }
+    property <bool> name-focus: name-field.has-focus;
+    changed name-focus => {
+        if root.name-focus {
+            root.reveal(name-field.y, name-field.y + name-field.height);
+        }
+    }
+    changed keyboard => {
+        if root.name-focus {
+            root.reveal(name-field.y, name-field.y + name-field.height);
+        }
+    }
+    VerticalLayout {
+        padding-top: S.top-inset;
+        Header {
+            title: App.contact-title;
+            back => {
+                App.page = Pages.thread;
+            }
+        }
+        flick := Flickable {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: S.gutter;
+                padding-bottom: S.gutter + root.keyboard;
+                spacing: S.s4;
+                alignment: start;
+                // Who they say they are (their public profile).
+                VerticalLayout {
+                    spacing: 6px;
+                    HorizontalLayout {
+                        alignment: center;
+                        Avatar {
+                            size: 96px;
+                            initial: App.contact-initial;
+                            tint: App.contact-tint;
+                            picture: App.contact-avatar;
+                            has-picture: App.contact-has-avatar;
+                        }
+                    }
+                    Rectangle {
+                        height: S.s1;
+                    }
+                    if App.contact-profile-name != "": Text {
+                        text: App.contact-profile-name;
+                        color: S.text;
+                        font-family: S.sans;
+                        font-size: S.t-heading;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+                    if App.contact-handle != "": Text {
+                        text: "@" + App.contact-handle;
+                        color: S.muted;
+                        font-family: S.sans;
+                        font-size: S.t-small;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+                    if App.contact-nip05 != "": Nip05Line {
+                        address: App.contact-nip05;
+                        verified: App.contact-nip05-ok;
+                        centred: true;
+                    }
+                    if !App.contact-has-profile: Text {
+                        text: App.contact-npub-short;
+                        color: S.muted;
+                        font-family: S.mono;
+                        font-size: S.t-small;
+                        horizontal-alignment: center;
+                    }
+                }
+                if App.contact-about != "" || App.contact-lud16 != "": Panel {
+                    Eyebrow {
+                        text: "NOSTR PROFILE";
+                    }
+                    if App.contact-about != "": Body {
+                        text: App.contact-about;
+                        font-size: 15px;
+                    }
+                    if App.contact-lud16 != "": HorizontalLayout {
+                        spacing: S.s2;
+                        VerticalLayout {
+                            alignment: center;
+                            BoltIcon {
+                                width: 18px;
+                                height: 18px;
+                            }
+                        }
+                        Text {
+                            text: App.contact-lud16;
+                            color: S.text;
+                            font-family: S.sans;
+                            font-size: S.t-small;
+                            font-weight: 600;
+                            overflow: elide;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Text {
+                        text: "Written by them on Nostr. Anyone can claim any name: the npub below is what counts.";
+                        color: S.faint;
+                        font-family: S.sans;
+                        font-size: S.t-meta;
+                        wrap: word-wrap;
+                    }
+                }
+                if !App.show-profiles: Text {
+                    text: "Nostr profiles are off (Me, Settings).";
+                    color: S.faint;
+                    font-family: S.sans;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                Panel {
+                    HorizontalLayout {
+                        alignment: center;
+                        QrBox {
+                            size: 240px;
+                            code: "nostr:" + App.contact-npub;
+                        }
+                    }
+                    Eyebrow {
+                        text: "NPUB";
+                    }
+                    Mono {
+                        text: App.contact-npub-chunked;
+                    }
+                    Body {
+                        font-size: 13px;
+                        color: S.muted;
+                        text: "Compare it with the npub their own app shows (on a call, or in person) before you trust a name.";
+                    }
+                }
+                name-field := Field {
+                    label: "Your name for them";
+                    words: true;
+                    placeholder: "Who is this?";
+                    value <=> App.contact-name;
+                    error: App.contact-error;
+                    // Done: put the keyboard away, so Save contact shows.
+                    accepted => {
+                        self.drop-focus();
+                    }
+                }
+                Btn {
+                    text: App.contact-saved ? "Rename" : "Save contact";
+                    kind: App.contact-saved ? 1 : 0;
+                    disabled: App.contact-name == "";
+                    clicked => {
+                        Actions.save-contact();
+                    }
+                }
+                Btn {
+                    text: "Message";
+                    kind: 1;
+                    clicked => {
+                        Actions.chat-with(App.contact-hex);
+                    }
+                }
+                Rectangle {
+                    height: S.s2;
+                }
+                if App.contact-saved: Btn {
+                    text: "Remove contact";
+                    kind: 2;
+                    clicked => {
+                        // The saved name: the field may hold an unsaved edit, or nothing.
+                        Confirm.title = "Remove " + App.contact-title + "?";
+                        Confirm.body = "The name you gave them is forgotten. Your chat stays; they show as an npub again.";
+                        Confirm.confirm-label = "Remove contact";
+                        Confirm.critical = true;
+                        Confirm.action = "remove-contact";
+                    }
+                }
+                Btn {
+                    text: "Delete chat history";
+                    kind: 2;
+                    clicked => {
+                        Confirm.title = "Delete this chat?";
+                        Confirm.body = "Every message with them is deleted on this Passport. Copies on relays stay sealed; this Passport can fetch them again.";
+                        Confirm.confirm-label = "Delete chat";
+                        Confirm.critical = true;
+                        Confirm.action = "delete-chat";
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component MePage inherits Rectangle {
+    background: S.bg;
+    VerticalLayout {
+        padding-top: S.top-inset;
+        Header {
+            title: "Me";
+            back => {
+                Actions.go-home();
+            }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: S.gutter;
+                spacing: S.s4;
+                alignment: start;
+                // Your profile as others see it.
+                Panel {
+                    inner-spacing: S.s3;
+                    HorizontalLayout {
+                        spacing: S.s4;
+                        Avatar {
+                            size: 72px;
+                            initial: App.my-initial;
+                            tint: App.my-tint;
+                            picture: App.my-avatar;
+                            has-picture: App.my-has-avatar;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 3px;
+                            horizontal-stretch: 1;
+                            HorizontalLayout {
+                                spacing: S.s2;
+                                Text {
+                                    text: App.my-name;
+                                    color: S.text;
+                                    font-family: S.sans;
+                                    font-size: S.t-heading;
+                                    font-weight: 700;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                    vertical-alignment: center;
+                                }
+                                if App.imported: VerticalLayout {
+                                    alignment: center;
+                                    Badge {
+                                        text: "IMPORTED";
+                                        tone: S.accent-text;
+                                    }
+                                }
+                            }
+                            if App.my-nip05 != "": Nip05Line {
+                                address: App.my-nip05;
+                                verified: App.my-nip05-ok;
+                                note: "";
+                            }
+                            Text {
+                                text: App.my-npub-short;
+                                color: S.muted;
+                                font-family: S.mono;
+                                font-size: S.t-meta;
+                            }
+                        }
+                    }
+                    if App.my-about != "": Body {
+                        text: App.my-about;
+                        font-size: S.t-small;
+                        color: S.muted;
+                    }
+                    if App.my-lud16 != "": HorizontalLayout {
+                        spacing: S.s2;
+                        VerticalLayout {
+                            alignment: center;
+                            BoltIcon {
+                                width: 16px;
+                                height: 16px;
+                            }
+                        }
+                        Text {
+                            text: App.my-lud16;
+                            color: S.text;
+                            font-family: S.sans;
+                            font-size: S.t-small;
+                            font-weight: 600;
+                            overflow: elide;
+                            vertical-alignment: center;
+                        }
+                    }
+                    if !App.my-has-profile: Text {
+                        text: App.show-profiles ? (App.link-up ? "No Nostr profile found for this npub yet." : "Your Nostr profile shows here once a phone is linked.") : "Nostr profiles are off (Settings, below).";
+                        color: S.faint;
+                        font-family: S.sans;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+                }
+                // Accounts on this Passport.
+                Rectangle {
+                    height: 68px;
+                    background: acc-ta.pressed ? S.panel-hi : S.panel;
+                    border-radius: S.r-lg;
+                    border-width: 1px;
+                    border-color: S.line;
+                    Rectangle {
+                        x: S.s4;
+                        width: 40px;
+                        height: 40px;
+                        border-radius: 20px;
+                        background: S.accent-soft;
+                        Image {
+                            width: 22px;
+                            height: 22px;
+                            source: Images.image("accounts-p");
+                            image-fit: contain;
+                        }
+                    }
+                    VerticalLayout {
+                        x: 70px;
+                        width: parent.width - 70px - 48px;
+                        alignment: center;
+                        spacing: 2px;
+                        Text {
+                            text: "Accounts";
+                            color: S.text;
+                            font-family: S.sans;
+                            font-size: S.t-row;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: App.accounts.length + (App.accounts.length == 1 ? " on this Passport · add another" : " on this Passport · switch or add");
+                            color: S.muted;
+                            font-family: S.sans;
+                            font-size: 13px;
+                            overflow: elide;
+                        }
+                    }
+                    ChevronIcon {
+                        x: parent.width - 40px;
+                        width: 20px;
+                        height: 20px;
+                    }
+                    acc-ta := TouchArea {
+                        clicked => {
+                            Actions.show-accounts();
+                        }
+                    }
+                }
+                Panel {
+                    HorizontalLayout {
+                        alignment: center;
+                        QrBox {
+                            size: 320px;
+                            code: "nostr:" + App.my-npub;
+                        }
+                    }
+                    Eyebrow {
+                        text: "YOUR NPUB";
+                    }
+                    Mono {
+                        text: App.my-npub-chunked;
+                    }
+                    Body {
+                        font-size: 13px;
+                        color: S.muted;
+                        text: App.imported ? "Imported nsec, sealed under this Passport's seed. It never leaves the device." : "Derived from this Passport's seed (NIP-06 over the app seed). Restore the Passport and the same npub comes back. The key never leaves the device.";
+                    }
+                }
+                Panel {
+                    accent: App.link-up ? S.ok.with-alpha(0.45) : S.line;
+                    HorizontalLayout {
+                        Eyebrow {
+                            text: "PHONE LINK";
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                        Pill {
+                            text: App.link-title;
+                            tone: App.link-up ? (App.link-title == "NO RELAYS" ? S.warn : S.ok) : S.faint;
+                        }
+                    }
+                    Body {
+                        font-size: S.t-small;
+                        text: App.link-detail;
+                    }
+                    Body {
+                        font-size: 13px;
+                        color: S.muted;
+                        text: App.sim ? "In the simulator a local WebSocket stands in for QuantumLink. Either way the phone only carries signed gift wraps: no plaintext, no keys, no contact names." : "Third-party apps get a QuantumLink data channel with QLv2 in KeyOS 1.5. Until then messages are written, sealed and queued here, and go out when the link opens.";
+                    }
+                }
+                Panel {
+                    Eyebrow {
+                        text: "DM INBOX RELAYS";
+                    }
+                    if App.relays.length == 0: Body {
+                        font-size: S.t-small;
+                        color: S.muted;
+                        text: "Link a phone to see its relays.";
+                    }
+                    for r in App.relays: Text {
+                        text: r;
+                        color: S.text;
+                        font-family: S.mono;
+                        font-size: S.t-small;
+                        overflow: elide;
+                    }
+                    Btn {
+                        text: "Publish as my DM relays";
+                        kind: 1;
+                        button-height: S.btn-h-sm;
+                        disabled: !App.link-up || App.relays.length == 0;
+                        clicked => {
+                            Actions.publish-relays();
+                        }
+                    }
+                    Body {
+                        font-size: 13px;
+                        color: App.relay-note == "" ? S.muted : App.relay-note-error ? S.bad : S.ok;
+                        text: App.relay-note != "" ? App.relay-note : "Signs a kind 10050 list on this Passport so other Nostr apps deliver your DMs to these relays.";
+                    }
+                }
+                Panel {
+                    Eyebrow {
+                        text: "SETTINGS";
+                    }
+                    Toggle {
+                        on: App.show-profiles;
+                        title: "Show Nostr profiles";
+                        detail: "Names and photos from public profiles. Your phone then learns whose profiles you look at.";
+                        toggled(v) => {
+                            Actions.set-show-profiles(v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component AccountItem inherits Rectangle {
+    in property <AccountRow> acct;
+    callback open();
+    callback remove();
+    height: 72px;
+    background: ta.pressed ? S.panel-hi : S.panel;
+    border-radius: S.r-lg;
+    border-width: root.acct.current ? 2px : 1px;
+    border-color: root.acct.current ? S.accent.with-alpha(0.7) : S.line;
+    ta := TouchArea {
+        clicked => {
+            root.open();
+        }
+    }
+    Avatar {
+        x: S.s4;
+        size: 44px;
+        initial: root.acct.initial;
+        tint: root.acct.tint;
+        picture: root.acct.avatar;
+        has-picture: root.acct.has-avatar;
+    }
+    VerticalLayout {
+        x: 74px;
+        width: parent.width - 74px - 112px;
+        alignment: center;
+        spacing: 3px;
+        HorizontalLayout {
+            spacing: S.s2;
+            Text {
+                text: root.acct.name;
+                color: S.text;
+                font-family: S.sans;
+                font-size: S.t-row;
+                font-weight: 700;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            if root.acct.imported: VerticalLayout {
+                alignment: center;
+                Badge {
+                    text: "IMPORTED";
+                    tone: S.accent-text;
+                }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            if root.acct.verified: VerticalLayout {
+                alignment: center;
+                VerifiedIcon {
+                    width: 12px;
+                    height: 12px;
+                }
+            }
+            Text {
+                text: root.acct.npub;
+                color: S.muted;
+                font-family: root.acct.verified ? S.sans : S.mono;
+                font-size: S.t-meta;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+    if root.acct.current: Pill {
+        x: parent.width - self.width - S.s4;
+        text: "IN USE";
+        tone: S.ok;
+    }
+    if !root.acct.current: IconBtn {
+        x: parent.width - 56px;
+        outlined: false;
+        icon: S.dark ? Images.image("close-d") : Images.image("close-l");
+        icon-size: 18px;
+        clicked => {
+            root.remove();
+        }
+    }
+}
+
+export component AccountsPage inherits Rectangle {
+    background: S.bg;
+    VerticalLayout {
+        padding-top: S.top-inset;
+        Header {
+            title: "Accounts";
+            subtitle: App.accounts.length == 1 ? "1 on this Passport" : App.accounts.length + " on this Passport";
+            subtitle-mono: false;
+            back => {
+                if App.has-identity {
+                    Actions.show-me();
+                } else {
+                    Actions.go-home();
+                }
+            }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: S.gutter;
+                spacing: S.s2;
+                alignment: start;
+                for a in App.accounts: AccountItem {
+                    acct: a;
+                    open => {
+                        Actions.switch-account(a.slot);
+                    }
+                    remove => {
+                        Confirm.slot = a.slot;
+                        Confirm.title = a.imported ? "Forget " + a.name + "?" : "Remove " + a.name + "?";
+                        Confirm.body = a.imported ? "Its secret key is erased from this Passport and cannot be recovered from it. Keep your nsec somewhere else if you want this account back. Its chats stay sealed here." : "It can be created again from this Passport's seed: Create a new Passport key brings the same npub and its chats back.";
+                        Confirm.confirm-label = a.imported ? "Forget the key" : "Remove account";
+                        Confirm.critical = a.imported;
+                        Confirm.action = "remove-account";
+                    }
+                }
+                Text {
+                    text: "Tap an account to switch. Each one has its own npub, contacts and chats; a linked phone follows the switch.";
+                    color: S.faint;
+                    font-family: S.sans;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                }
+                Rectangle {
+                    height: S.s3;
+                }
+                Panel {
+                    inner-spacing: S.s3;
+                    Eyebrow {
+                        text: "ADD AN ACCOUNT";
+                    }
+                    Btn {
+                        text: "Create a new Passport key";
+                        disabled: !App.can-add-account;
+                        clicked => {
+                            Actions.add-account();
+                        }
+                    }
+                    if App.can-add-account: Text {
+                        text: App.next-account-label + ": derived from this Passport's seed (NIP-06), so restoring the Passport brings it back.";
+                        color: S.muted;
+                        font-family: S.sans;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+                    Btn {
+                        text: "Use an existing nsec";
+                        kind: 1;
+                        disabled: !App.can-add-account;
+                        clicked => {
+                            Actions.start-import();
+                        }
+                    }
+                    if !App.can-add-account: Text {
+                        text: "This Passport holds 10 accounts. Remove one to add another.";
+                        color: S.warn;
+                        font-family: S.sans;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+}

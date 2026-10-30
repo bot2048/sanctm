@@ -1,0 +1,1099 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Sanctum widgets, built on the design tokens in S (ui/state.slint, docs/DESIGN.md).
+
+import { Images } from "@ui/theme.slint";
+import { S, Utils, MsgRow, ReactionRow } from "state.slint";
+
+// Icons are SVG images (resources/images), rasterised at build time: the device's software
+// renderer does not draw vector Path elements. Theme-coloured icons come in -d / -l pairs.
+
+export component Logo inherits Image {
+    source: Images.image("logo");
+    image-fit: contain;
+}
+
+export component BackIcon inherits Image {
+    source: S.dark ? Images.image("back-d") : Images.image("back-l");
+    image-fit: contain;
+}
+
+export component UserIcon inherits Image {
+    source: S.dark ? Images.image("user-d") : Images.image("user-l");
+    image-fit: contain;
+}
+
+export component CloseIcon inherits Image {
+    source: S.dark ? Images.image("close-d") : Images.image("close-l");
+    image-fit: contain;
+}
+
+export component ReplyIcon inherits Image {
+    source: S.dark ? Images.image("reply-d") : Images.image("reply-l");
+    image-fit: contain;
+}
+
+export component ChevronIcon inherits Image {
+    source: S.dark ? Images.image("chevron-md") : Images.image("chevron-ml");
+    image-fit: contain;
+}
+
+export component LockIcon inherits Image {
+    source: Images.image("lock-p");
+    image-fit: contain;
+}
+
+export component BoltIcon inherits Image {
+    source: Images.image("bolt");
+    image-fit: contain;
+}
+
+export component VerifiedIcon inherits Image {
+    source: Images.image("verified");
+    image-fit: contain;
+}
+
+// kind: 0 ok (check), 1 warning (!), 2 refused (x)
+export component StateIcon inherits Image {
+    in property <int> kind: 0;
+    // -l variants: the dark-theme tones are under 3:1 on the light theme's tinted circles.
+    source: kind == 0 ? (S.dark ? Images.image("check-ok") : Images.image("check-ok-l"))
+        : kind == 1 ? (S.dark ? Images.image("alert-warn") : Images.image("alert-warn-l"))
+        : (S.dark ? Images.image("cross-bad") : Images.image("cross-bad-l"));
+    image-fit: contain;
+}
+
+// A bundled reaction emoji (the device fonts have no emoji).
+export component EmojiIcon inherits Image {
+    in property <string> key;
+    source: key == "heart" ? Images.image("re-heart")
+        : key == "thumbs" ? Images.image("re-thumbs")
+        : key == "joy" ? Images.image("re-joy")
+        : key == "fire" ? Images.image("re-fire")
+        : key == "pray" ? Images.image("re-pray")
+        : key == "thumbsdown" ? Images.image("re-thumbsdown")
+        : Images.image("re-star");
+    image-fit: contain;
+}
+
+// Media card icon: white on an outgoing (purple) bubble, purple on an incoming one.
+export component MediaIcon inherits Image {
+    in property <string> name;
+    in property <bool> white;
+    source: white
+        ? (name == "photo" ? Images.image("md-photo-w") : name == "video" ? Images.image("md-video-w") : name == "voice" ? Images.image("md-voice-w") : name == "link" ? Images.image("md-link-w") : name == "retry" ? Images.image("md-retry-w") : Images.image("md-file-w"))
+        : (name == "photo" ? Images.image("md-photo-p") : name == "video" ? Images.image("md-video-p") : name == "voice" ? Images.image("md-voice-p") : name == "link" ? Images.image("md-link-p") : name == "retry" ? Images.image("md-retry-p") : Images.image("md-file-p"));
+    image-fit: contain;
+}
+
+export component Eyebrow inherits Text {
+    color: S.muted;
+    font-family: S.sans;
+    font-size: S.t-meta;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+}
+
+export component Body inherits Text {
+    color: S.text;
+    font-family: S.sans;
+    font-size: S.t-body;
+    wrap: word-wrap;
+}
+
+export component Mono inherits Text {
+    color: S.text;
+    font-family: S.mono;
+    font-size: 16px;
+    wrap: char-wrap;
+}
+
+export component Panel inherits Rectangle {
+    in property <color> accent: S.line;
+    in property <length> inner-padding: S.s4;
+    in property <length> inner-spacing: 10px;
+    background: S.panel;
+    border-radius: S.r-lg;
+    border-width: 1px;
+    border-color: accent;
+    VerticalLayout {
+        padding: inner-padding;
+        spacing: inner-spacing;
+        @children
+    }
+}
+
+// Status pill: a dot and a word in caps.
+export component Pill inherits Rectangle {
+    in property <string> text;
+    in property <color> tone: S.ok;
+    height: 28px;
+    width: label.preferred-width + 34px;
+    border-radius: 14px;
+    background: tone.with-alpha(0.12);
+    border-width: 1px;
+    border-color: tone.with-alpha(0.55);
+    Rectangle {
+        x: 12px;
+        width: 8px;
+        height: 8px;
+        border-radius: 4px;
+        background: root.tone;
+    }
+    label := Text {
+        x: 26px;
+        text: root.text;
+        color: root.tone;
+        font-family: S.sans;
+        font-size: S.t-meta;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        vertical-alignment: center;
+    }
+}
+
+// Small caps badge (NEW, IMPORTED).
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <color> tone: S.warn;
+    height: 20px;
+    width: t.preferred-width + 14px;
+    border-radius: 10px;
+    background: tone.with-alpha(0.15);
+    t := Text {
+        text: root.text;
+        color: root.tone;
+        font-family: S.sans;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.8px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Pill button. kind: 0 primary (purple), 1 secondary, 2 negative, 3 tertiary (text only).
+export component Btn inherits Rectangle {
+    in property <string> text;
+    in property <int> kind: 0;
+    in property <bool> disabled: false;
+    in property <length> button-height: S.btn-h;
+    callback clicked();
+    min-height: button-height;
+    max-height: button-height;
+    preferred-height: button-height;
+    horizontal-stretch: 1;
+    border-radius: button-height / 2;
+    // Disabled: a quiet panel with a faint label in every kind (a washed-out purple with a
+    // white label is unreadable in the light theme).
+    background: disabled ? (kind == 3 ? transparent : S.panel-hi)
+        : kind == 0 ? (ta.pressed ? S.fill-pressed : S.fill)
+        : kind == 2 ? S.bad.with-alpha(ta.pressed ? 0.24 : 0.12)
+        : kind == 3 ? (ta.pressed ? S.panel-hi : transparent)
+        : (ta.pressed ? S.line : S.panel-hi);
+    border-width: kind == 3 ? 0px : 1px;
+    border-color: disabled ? S.line : kind == 0 ? transparent : kind == 2 ? S.bad.with-alpha(0.55) : S.line-hi;
+    animate background { duration: 90ms; }
+    Text {
+        x: S.s6;
+        width: parent.width - 2 * S.s6;
+        text: root.text;
+        color: root.disabled ? S.faint : root.kind == 0 ? S.on-accent : root.kind == 2 ? S.bad : root.kind == 3 ? S.accent-text : S.text;
+        font-family: S.sans;
+        font-size: root.button-height < S.btn-h ? 16px : S.t-button;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    ta := TouchArea {
+        enabled: !root.disabled;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// Round icon button: 40 px to look at, at least 56 px to touch.
+export component IconBtn inherits Rectangle {
+    in property <image> icon;
+    in property <length> size: 40px;
+    in property <length> icon-size: 22px;
+    in property <bool> outlined: true;
+    callback clicked();
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: ta.pressed ? S.panel-hi : transparent;
+    border-width: outlined ? 1.5px : 0px;
+    border-color: S.line-hi;
+    Image {
+        width: root.icon-size;
+        height: root.icon-size;
+        source: root.icon;
+        image-fit: contain;
+    }
+    ta := TouchArea {
+        x: (root.size - max(root.size, S.touch)) / 2;
+        y: (root.size - max(root.size, S.touch)) / 2;
+        width: max(root.size, S.touch);
+        height: max(root.size, S.touch);
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// Touchable pill (44 px).
+export component Chip inherits Rectangle {
+    in property <string> text;
+    in property <color> tone: S.accent-text;
+    callback clicked();
+    height: 44px;
+    width: t.preferred-width + 32px;
+    border-radius: 22px;
+    background: ta.pressed ? tone.with-alpha(0.25) : tone.with-alpha(0.10);
+    border-width: 1px;
+    border-color: tone.with-alpha(0.5);
+    t := Text {
+        text: root.text;
+        color: root.tone;
+        font-family: S.sans;
+        font-size: S.t-small;
+        font-weight: 700;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+    ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// Round avatar: their profile photo (masked round in Rust), else an initial on the key's tint.
+export component Avatar inherits Rectangle {
+    in property <string> initial;
+    in property <color> tint: S.accent;
+    in property <length> size: 48px;
+    in property <image> picture;
+    in property <bool> has-picture: false;
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: has-picture ? S.panel-hi : tint.with-alpha(S.dark ? 0.22 : 0.16);
+    if !root.has-picture: Text {
+        text: root.initial;
+        color: S.dark ? root.tint.brighter(0.35) : root.tint.darker(0.25);
+        font-family: S.sans;
+        font-size: root.size * 0.42;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    if root.has-picture: Image {
+        width: root.size;
+        height: root.size;
+        source: root.picture;
+        image-fit: cover;
+    }
+    // Hairline ring, so a light photo does not melt into a light page.
+    Rectangle {
+        width: root.size;
+        height: root.size;
+        border-radius: root.size / 2;
+        border-width: 1px;
+        border-color: root.has-picture ? S.line-hi : root.tint.with-alpha(0.55);
+    }
+}
+
+// Page header: chevron back (64 px touch), centred title, optional mono subtitle. A right-hand
+// button can be laid over it by the page (`IconBtn { x: parent.width - 52px; }`).
+export component Header inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle: "";
+    in property <bool> subtitle-mono: true;
+    in property <bool> show-back: true;
+    callback back();
+    height: S.header-h;
+    background: S.bg;
+    if root.show-back: Rectangle {
+        x: 0px;
+        width: 64px;
+        height: parent.height;
+        Rectangle {
+            x: 12px;
+            width: 40px;
+            height: 40px;
+            border-radius: 20px;
+            background: back-ta.pressed ? S.panel-hi : transparent;
+            BackIcon {
+                width: 26px;
+                height: 26px;
+            }
+        }
+        back-ta := TouchArea {
+            clicked => {
+                root.back();
+            }
+        }
+    }
+    VerticalLayout {
+        x: 64px;
+        width: parent.width - 128px;
+        alignment: center;
+        spacing: 2px;
+        Text {
+            text: root.title;
+            color: S.text;
+            font-family: S.sans;
+            font-size: S.t-title;
+            font-weight: 700;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+        if root.subtitle != "": Text {
+            text: root.subtitle;
+            color: S.muted;
+            font-family: root.subtitle-mono ? S.mono : S.sans;
+            font-size: S.t-meta;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+    @children
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: S.line;
+    }
+}
+
+// Text field (Foundation's TitledInput numbers): label, 56 px field, radius 24, purple focus
+// ring, error line. `secret` masks the text with a Show / Hide toggle.
+export component Field inherits VerticalLayout {
+    in property <string> label;
+    in property <string> placeholder;
+    in-out property <string> value;
+    in property <string> error;
+    in property <string> hint;
+    in property <bool> mono: false;
+    in property <bool> secret: false;
+    // The KeyOS keyboard's accept key label ("Next", "Done", …) and capitals for names.
+    in property <string> key-label: "Done";
+    in property <bool> words: false;
+    property <bool> reveal: false;
+    property <length> side: root.secret ? 72px : 0px;
+    out property <bool> has-focus: input.has-focus;
+    // The keyboard's Done key (Return) on this field; pages move to the next field or close
+    // the keyboard.
+    callback accepted();
+    public function focus-input() {
+        input.focus();
+    }
+    public function drop-focus() {
+        input.clear-focus();
+    }
+    forward-focus: input;
+    spacing: S.s2;
+    if root.label != "": HorizontalLayout {
+        padding-left: S.s4;
+        Text {
+            text: root.label;
+            color: S.muted;
+            font-family: S.sans;
+            font-size: S.t-small;
+            font-weight: 600;
+        }
+    }
+    Rectangle {
+        height: S.field-h;
+        background: S.panel;
+        border-radius: S.r-xl;
+        border-width: input.has-focus || root.error != "" ? 2px : 1px;
+        border-color: root.error != "" ? S.bad : input.has-focus ? S.accent : S.line-hi;
+        clip: true;
+        if root.value == "": Text {
+            x: S.s5;
+            width: parent.width - 2 * S.s5 - root.side;
+            height: parent.height;
+            text: root.placeholder;
+            color: S.faint;
+            font-family: root.mono ? S.mono : S.sans;
+            font-size: root.mono ? 16px : 17px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        input := TextInput {
+            x: S.s5;
+            width: parent.width - 2 * S.s5 - root.side;
+            height: parent.height;
+            text <=> root.value;
+            color: S.text;
+            font-family: root.mono ? S.mono : S.sans;
+            font-size: root.mono ? 16px : 17px;
+            single-line: true;
+            vertical-alignment: center;
+            input-type: root.secret && !root.reveal ? InputType.password : InputType.text;
+            accept-button-text: root.key-label;
+            caps-mode: root.words ? CapsMode.words : CapsMode.none;
+            selection-background-color: S.accent-soft;
+            selection-foreground-color: S.text;
+            accepted => {
+                root.accepted();
+            }
+        }
+        if root.secret: Rectangle {
+            x: parent.width - root.side;
+            width: root.side;
+            height: parent.height;
+            background: reveal-ta.pressed ? S.panel-hi : transparent;
+            Text {
+                text: root.reveal ? "Hide" : "Show";
+                color: S.accent-text;
+                font-family: S.sans;
+                font-size: S.t-small;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            reveal-ta := TouchArea {
+                clicked => {
+                    root.reveal = !root.reveal;
+                }
+            }
+        }
+    }
+    if root.error != "" || root.hint != "": HorizontalLayout {
+        padding-left: S.s4;
+        padding-right: S.s4;
+        Text {
+            text: root.error != "" ? root.error : root.hint;
+            color: root.error != "" ? S.bad : S.faint;
+            font-family: S.sans;
+            font-size: 13px;
+            wrap: word-wrap;
+        }
+    }
+}
+
+// A QR code on a white card (scanners need the light quiet zone, in both themes).
+export component QrBox inherits Rectangle {
+    in property <string> code;
+    in property <length> size: 350px;
+    width: size;
+    height: size;
+    background: white;
+    border-radius: S.r-xl;
+    border-width: S.dark ? 0px : 1px;
+    border-color: S.line;
+    Image {
+        width: root.size - 10px;
+        height: root.size - 10px;
+        source: Utils.qrcode(root.code, #000000, #ffffff);
+        image-rendering: pixelated;
+        image-fit: contain;
+    }
+}
+
+// The thread's message field: one line, growing to `max-lines`, then scrolling to the cursor
+// (the SDK TextArea's approach). The focused field brings up the KeyOS keyboard; the page
+// lifts it above the keyboard.
+export component MessageField inherits Rectangle {
+    in-out property <string> value;
+    in property <string> placeholder;
+    in property <int> max-lines: 4;
+    out property <bool> has-focus: ti.has-focus;
+    // The KeyOS keyboard's Done key sends Return: it closes the keyboard here, it does not
+    // start a new line.
+    callback done();
+    property <length> pad-x: 18px;
+    property <length> pad-y: 14px;
+    property <length> content-w: max(0px, root.width - 2 * pad-x);
+    property <length> line-h: one-line.preferred-height;
+    property <length> natural: max(line-h, measure.preferred-height);
+    property <length> shown: min(natural, line-h * max-lines);
+    public function take-focus() {
+        ti.focus();
+    }
+    public function drop-focus() {
+        ti.clear-focus();
+    }
+    height: max(S.btn-h-sm + 4px, shown + 2 * pad-y);
+    background: S.panel;
+    border-radius: 26px;
+    border-width: ti.has-focus ? 2px : 1px;
+    border-color: ti.has-focus ? S.accent : S.line-hi;
+    clip: true;
+    one-line := Text {
+        visible: false;
+        width: 0px;
+        height: 0px;
+        text: "W";
+        font-family: S.sans;
+        font-size: S.t-bubble;
+    }
+    measure := Text {
+        x: -10000px;
+        y: -10000px;
+        width: root.content-w;
+        text: root.value == "" ? "W" : root.value;
+        color: transparent;
+        font-family: S.sans;
+        font-size: S.t-bubble;
+        wrap: word-wrap;
+    }
+    if root.value == "": Text {
+        x: root.pad-x;
+        y: root.pad-y;
+        width: root.content-w;
+        text: root.placeholder;
+        color: S.faint;
+        font-family: S.sans;
+        font-size: S.t-bubble;
+        overflow: elide;
+    }
+    FocusScope {
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        capture-key-pressed(e) => {
+            if e.text == Key.Return && !e.modifiers.shift {
+                root.done();
+                return accept;
+            }
+            reject
+        }
+        sc := Flickable {
+            x: root.pad-x;
+            y: root.pad-y;
+            width: root.content-w;
+            height: root.shown;
+            viewport-width: self.width;
+            viewport-height: max(root.shown, root.natural);
+            ti := TextInput {
+                width: parent.width;
+                height: max(root.shown, root.natural);
+                text <=> root.value;
+                color: S.text;
+                font-family: S.sans;
+                font-size: S.t-bubble;
+                single-line: false;
+                wrap: word-wrap;
+                vertical-alignment: top;
+                accept-button-text: "Done";
+                caps-mode: CapsMode.sentences;
+                selection-background-color: S.accent-soft;
+                selection-foreground-color: S.text;
+                cursor-position-changed(cpos) => {
+                    if (cpos.y + sc.viewport-y < 0px) {
+                        sc.viewport-y = min(0px, max(sc.height - self.height, -cpos.y));
+                    } else if (cpos.y + sc.viewport-y > sc.height - root.line-h) {
+                        sc.viewport-y = min(0px, max(sc.height - self.height, sc.height - cpos.y - root.line-h));
+                    }
+                    sc.viewport-x = 0px;
+                }
+            }
+        }
+    }
+}
+
+// Settings row with a switch.
+export component Toggle inherits Rectangle {
+    in property <bool> on;
+    in property <string> title;
+    in property <string> detail;
+    callback toggled(bool);
+    height: max(S.touch, lay.preferred-height);
+    lay := HorizontalLayout {
+        spacing: S.s4;
+        VerticalLayout {
+            alignment: center;
+            spacing: 4px;
+            horizontal-stretch: 1;
+            Text {
+                text: root.title;
+                color: S.text;
+                font-family: S.sans;
+                font-size: S.t-body;
+                font-weight: 700;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.detail;
+                color: S.muted;
+                font-family: S.sans;
+                font-size: 13px;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 52px;
+                height: 32px;
+                border-radius: 16px;
+                background: root.on ? S.fill : S.line-hi;
+                animate background { duration: S.quick; }
+                Rectangle {
+                    x: root.on ? parent.width - self.width - 3px : 3px;
+                    y: 3px;
+                    width: 26px;
+                    height: 26px;
+                    border-radius: 13px;
+                    background: #ffffff;
+                    drop-shadow-blur: 3px;
+                    drop-shadow-color: #00000040;
+                    animate x { duration: S.quick; easing: ease-out; }
+                }
+            }
+        }
+    }
+    TouchArea {
+        clicked => {
+            root.toggled(!root.on);
+        }
+    }
+}
+
+// Empty state: circled icon, heading, one sentence.
+export component EmptyState inherits VerticalLayout {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> body;
+    spacing: S.s4;
+    alignment: start;
+    HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 96px;
+            height: 96px;
+            border-radius: 48px;
+            background: S.accent-soft;
+            border-width: 1px;
+            border-color: S.accent.with-alpha(0.35);
+            Image {
+                width: 44px;
+                height: 44px;
+                source: root.icon;
+                image-fit: contain;
+            }
+        }
+    }
+    Text {
+        text: root.title;
+        color: S.text;
+        font-family: S.sans;
+        font-size: S.t-title-lg;
+        font-weight: 800;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    Text {
+        text: root.body;
+        color: S.muted;
+        font-family: S.sans;
+        font-size: S.t-body;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+}
+
+// Confirmation (Foundation's ConfirmationModal): scrim, 424 px card, icon, title, text,
+// Cancel + confirm. `critical`: the confirm button destroys something.
+export component ConfirmModal inherits Rectangle {
+    in property <string> title;
+    in property <string> body;
+    in property <string> confirm-label;
+    in property <bool> critical;
+    callback cancel();
+    callback confirm();
+    background: S.overlay;
+    TouchArea { }
+    Rectangle {
+        width: min(424px, root.width - 2 * S.s6);
+        height: lay.preferred-height;
+        background: S.panel;
+        border-radius: S.r-xl;
+        border-width: S.dark ? 1px : 0px;
+        border-color: S.line;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #00000066;
+        lay := VerticalLayout {
+            padding: S.s6;
+            spacing: S.s4;
+            HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 72px;
+                    height: 72px;
+                    border-radius: 36px;
+                    background: (root.critical ? S.bad : S.warn).with-alpha(0.14);
+                    StateIcon {
+                        width: 40px;
+                        height: 40px;
+                        kind: root.critical ? 2 : 1;
+                    }
+                }
+            }
+            Text {
+                text: root.title;
+                color: S.text;
+                font-family: S.sans;
+                font-size: S.t-title;
+                font-weight: 700;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.body;
+                color: S.muted;
+                font-family: S.sans;
+                font-size: 15px;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            Rectangle {
+                height: S.s1;
+            }
+            Btn {
+                text: root.confirm-label;
+                kind: root.critical ? 2 : 0;
+                clicked => {
+                    root.confirm();
+                }
+            }
+            Btn {
+                text: "Cancel";
+                kind: 1;
+                clicked => {
+                    root.cancel();
+                }
+            }
+        }
+    }
+}
+
+// One reaction under a bubble, ringed in the page colour where it overlaps the bubble.
+component ReactionPill inherits Rectangle {
+    in property <ReactionRow> r;
+    height: 28px;
+    width: lay.preferred-width + 4px;
+    border-radius: 14px;
+    background: S.bg;
+    Rectangle {
+        x: 2px;
+        y: 2px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        border-radius: 12px;
+        background: root.r.mine ? (S.dark ? #2c1d47 : #ecdffb) : S.panel;
+        border-width: 1px;
+        border-color: root.r.mine ? S.accent.with-alpha(0.7) : S.line-hi;
+        lay := HorizontalLayout {
+            padding-left: 7px;
+            padding-right: root.r.count > 1 ? 8px : 7px;
+            spacing: 3px;
+            alignment: center;
+            if root.r.icon != "": VerticalLayout {
+                alignment: center;
+                EmojiIcon {
+                    key: root.r.icon;
+                    width: 15px;
+                    height: 15px;
+                }
+            }
+            if root.r.icon == "": Text {
+                text: root.r.emoji;
+                color: S.text;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+            if root.r.count > 1: Text {
+                text: root.r.count;
+                color: root.r.mine ? S.accent-text : S.muted;
+                font-family: S.sans;
+                font-size: S.t-meta;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// One chat bubble. Outgoing: Nostr purple on the right; incoming: panel on the left. The
+// width is computed from the content (hidden measuring Texts) so wrapped text gets the right
+// height: a bubble sized by a HorizontalLayout would measure its text unwrapped.
+export component Bubble inherits Rectangle {
+    in property <MsgRow> m;
+    in property <bool> selected;
+    callback tapped();
+    callback media-tapped();
+    callback picture-tapped();
+    property <bool> photo-only: m.media == 5 && m.text == "" && !m.reply && !m.group;
+    property <length> pad: photo-only ? 6px : 14px;
+    property <length> widest: root.width - 56px - 2 * pad;
+    property <bool> has-text: m.text != "";
+    property <length> pic-max-h: 300px;
+    property <length> pic-dw: m.pic-w > 0 && m.pic-h > 0 ? min(widest, m.pic-w * 1px, m.pic-w * 1px * (pic-max-h / (m.pic-h * 1px))) : 0px;
+    property <length> pic-dh: m.pic-w > 0 ? pic-dw * m.pic-h / m.pic-w : 0px;
+    property <length> quote-w: max(qa-m.preferred-width, qt-m.preferred-width) + 24px;
+    property <length> inner: min(widest, max(has-text ? text-m.preferred-width : 0px, meta-m.preferred-width + (photo-only ? 12px : 0px) + (m.sent ? 19px : 0px), m.group ? 90px : 0px, m.reply ? max(150px, quote-w) : 0px, m.media == 5 ? pic-dw : m.media != 0 ? 236px : 0px));
+    property <bool> blink;
+    // Take the list's width; never push it wider (the measuring Texts are long single lines).
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    height: body.height + (m.reactions.length > 0 ? 22px : 0px);
+
+    text-m := Text {
+        visible: false;
+        width: 0px;
+        height: 0px;
+        text: root.m.text;
+        font-family: S.sans;
+        font-size: S.t-bubble;
+    }
+    meta-m := Text {
+        visible: false;
+        width: 0px;
+        height: 0px;
+        text: root.m.meta;
+        font-family: S.sans;
+        font-size: S.t-meta;
+        font-weight: 600;
+    }
+    qa-m := Text {
+        visible: false;
+        width: 0px;
+        height: 0px;
+        text: root.m.reply-author;
+        font-family: S.sans;
+        font-size: S.t-meta;
+        font-weight: 700;
+    }
+    qt-m := Text {
+        visible: false;
+        width: 0px;
+        height: 0px;
+        text: root.m.reply-text;
+        font-family: S.sans;
+        font-size: 13px;
+    }
+    Timer {
+        interval: 600ms;
+        running: root.m.media == 4;
+        triggered => {
+            root.blink = !root.blink;
+        }
+    }
+
+    if root.selected: Rectangle {
+        x: body.x - 4px;
+        y: -4px;
+        width: body.width + 8px;
+        height: body.height + 8px;
+        border-radius: S.r-bubble + 4px;
+        border-width: 2px;
+        border-color: S.accent-text;
+    }
+
+    body := Rectangle {
+        x: root.m.out ? root.width - self.width : 0px;
+        y: 0px;
+        width: root.inner + 2 * root.pad;
+        height: lay.preferred-height;
+        background: root.m.out ? (ta.pressed ? S.fill-pressed : S.bubble-out) : (ta.pressed ? S.panel-hi : S.bubble-in);
+        border-radius: S.r-bubble;
+        // A failed outgoing message gets a red outline too, not just a paler status line.
+        border-width: root.m.out ? (root.m.failed ? 2px : 0px) : 1px;
+        border-color: root.m.failed ? S.bad : S.bubble-in-line;
+        ta := TouchArea {
+            clicked => {
+                root.tapped();
+            }
+        }
+        lay := VerticalLayout {
+            padding-left: root.pad;
+            padding-right: root.pad;
+            padding-top: root.photo-only ? 6px : 10px;
+            padding-bottom: 8px;
+            spacing: 6px;
+            if root.m.group: Text {
+                text: "GROUP CHAT";
+                color: root.m.out ? #ffffffe6 : S.accent-text;
+                font-family: S.sans;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 1.2px;
+            }
+            // The message this one answers.
+            if root.m.reply: Rectangle {
+                height: q.preferred-height;
+                border-radius: S.r-md;
+                // Out bubbles: a darker (not lighter) purple keeps white text above 4.5:1.
+                background: root.m.out ? #0000002e : S.accent-soft;
+                Rectangle {
+                    x: 0px;
+                    y: 5px;
+                    width: 3px;
+                    height: parent.height - 10px;
+                    border-radius: 1.5px;
+                    background: root.m.out ? #ffffffcc : S.accent;
+                }
+                q := VerticalLayout {
+                    padding-left: 12px;
+                    padding-right: 10px;
+                    padding-top: 6px;
+                    padding-bottom: 7px;
+                    spacing: 1px;
+                    if root.m.reply-author != "": Text {
+                        text: root.m.reply-author;
+                        color: root.m.out ? S.on-accent : S.accent-text;
+                        font-family: S.sans;
+                        font-size: S.t-meta;
+                        font-weight: 700;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: root.m.reply-text;
+                        color: root.m.out ? #ffffffe6 : S.muted;
+                        font-family: S.sans;
+                        font-size: 13px;
+                        font-italic: root.m.reply-author == "";
+                        overflow: elide;
+                    }
+                }
+            }
+            // A file or picture link that is not shown yet.
+            if root.m.media != 0 && root.m.media != 5: Rectangle {
+                height: max(60px, cl.preferred-height + 16px);
+                border-radius: S.r-md;
+                background: root.m.out ? (card-ta.pressed ? #00000047 : #0000002e) : (card-ta.pressed ? S.line : S.panel-hi);
+                border-width: root.m.media == 6 ? 1px : 0px;
+                border-color: root.m.out ? #ffd0d7 : S.bad.with-alpha(0.6);
+                MediaIcon {
+                    x: 12px;
+                    width: 30px;
+                    height: 30px;
+                    name: root.m.media-icon;
+                    white: root.m.out;
+                    opacity: root.m.media == 4 && root.blink ? 0.3 : 1.0;
+                    animate opacity { duration: 500ms; }
+                }
+                cl := VerticalLayout {
+                    x: 54px;
+                    width: parent.width - 66px;
+                    height: parent.height;
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: root.m.media-title;
+                        color: root.m.out ? S.on-accent : S.text;
+                        font-family: S.sans;
+                        font-size: 15px;
+                        font-weight: 700;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.m.media-detail;
+                        color: root.m.out ? (root.m.media == 6 ? #ffe3e8 : #ffffffe6) : (root.m.media == 6 ? S.bad : S.muted);
+                        font-family: S.sans;
+                        font-size: S.t-meta;
+                        wrap: word-wrap;
+                    }
+                }
+                card-ta := TouchArea {
+                    enabled: root.m.media == 1 || root.m.media == 3 || root.m.media == 6;
+                    clicked => {
+                        root.media-tapped();
+                    }
+                }
+            }
+            if root.m.media == 5: Rectangle {
+                width: root.pic-dw;
+                height: root.pic-dh;
+                Image {
+                    width: parent.width;
+                    height: parent.height;
+                    source: root.m.picture;
+                    image-fit: fill;
+                }
+                pic-ta := TouchArea {
+                    clicked => {
+                        root.picture-tapped();
+                    }
+                }
+                if root.m.kept: Rectangle {
+                    x: 8px;
+                    y: parent.height - self.height - 8px;
+                    height: 22px;
+                    width: kept-t.preferred-width + 30px;
+                    border-radius: 11px;
+                    background: #000000a6;
+                    LockIcon {
+                        x: 8px;
+                        width: 12px;
+                        height: 12px;
+                    }
+                    kept-t := Text {
+                        x: 23px;
+                        text: "Kept";
+                        color: #ffffff;
+                        font-family: S.sans;
+                        font-size: 11px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            if root.has-text: Text {
+                text: root.m.text;
+                color: root.m.out ? S.on-accent : S.text;
+                font-family: S.sans;
+                font-size: S.t-bubble;
+                wrap: word-wrap;
+            }
+            // Wraps: a failure carries the relay's reason, which can be long.
+            HorizontalLayout {
+                padding-left: root.photo-only ? 6px : 0px;
+                padding-right: root.photo-only ? 6px : 0px;
+                spacing: 4px;
+                alignment: root.m.out ? end : start;
+                Text {
+                    text: root.m.meta;
+                    wrap: word-wrap;
+                    color: root.m.failed ? (root.m.out ? #ffe3e8 : S.bad) : root.m.out ? #ffffffe6 : S.faint;
+                    font-family: S.sans;
+                    font-size: S.t-meta;
+                    font-weight: 600;
+                    horizontal-alignment: root.m.out ? right : left;
+                }
+                // Stored by at least one relay.
+                if root.m.sent: VerticalLayout {
+                    alignment: end;
+                    Image {
+                        width: 15px;
+                        height: 15px;
+                        source: Images.image("tick-w");
+                        image-fit: contain;
+                        opacity: 0.85;
+                    }
+                }
+            }
+        }
+    }
+
+    // Reactions hang over the bubble's bottom edge.
+    if root.m.reactions.length > 0: HorizontalLayout {
+        x: 0px;
+        y: body.height - 6px;
+        width: root.width;
+        height: 28px;
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 4px;
+        alignment: root.m.out ? end : start;
+        for r in root.m.reactions: ReactionPill {
+            r: r;
+        }
+    }
+}

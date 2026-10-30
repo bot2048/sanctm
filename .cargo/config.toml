@@ -1,0 +1,2 @@
+[env]
+CC_armv7a_unknown_xous_elf = "arm-none-eabi-gcc"

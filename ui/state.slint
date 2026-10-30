@@ -1,0 +1,376 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Sanctum: shared types, design tokens and the Rust <-> UI globals. The tokens follow
+// docs/DESIGN.md; pages use them instead of ad-hoc numbers.
+
+export struct ChatRow {
+    peer: string,     // hex pubkey
+    name: string,
+    initial: string,
+    tint: color,
+    avatar: image,
+    has-avatar: bool,
+    // The name is a short npub (no contact name, no profile): shown in mono.
+    mono: bool,
+    preview: string,
+    when: string,
+    unread: int,
+    known: bool,
+}
+
+// One reaction under a bubble: `icon` names a bundled emoji picture ("" = draw the text).
+export struct ReactionRow {
+    emoji: string,
+    icon: string,
+    count: int,
+    mine: bool,
+}
+
+export struct MsgRow {
+    id: string,
+    text: string,
+    out: bool,
+    meta: string,
+    failed: bool,
+    // Ours, and stored by at least one relay (a tick next to the meta line).
+    sent: bool,
+    group: bool,
+    // Reply quote: author ("" when the parent is not on this Passport) and its first line.
+    reply: bool,
+    reply-author: string,
+    reply-text: string,
+    reactions: [ReactionRow],
+    // 0 none, 1 file card (tap to open), 2 file card (open in a phone app), 3 picture link
+    // (tap to load), 4 loading, 5 picture shown, 6 failed (tap to retry)
+    media: int,
+    media-title: string,
+    media-detail: string,
+    media-icon: string,   // photo | video | voice | file | link | retry
+    picture: image,
+    pic-w: int,
+    pic-h: int,
+    kept: bool,
+}
+
+export struct ContactRow {
+    hex: string,
+    name: string,
+    initial: string,
+    tint: color,
+    avatar: image,
+    has-avatar: bool,
+    // Verified NIP-05 address when there is one (verified = true), else the short npub.
+    npub: string,
+    verified: bool,
+}
+
+export struct AccountRow {
+    slot: int,
+    name: string,
+    npub: string,
+    verified: bool,
+    initial: string,
+    tint: color,
+    avatar: image,
+    has-avatar: bool,
+    imported: bool,
+    current: bool,
+}
+
+export global Pages {
+    out property <int> loading: 0;
+    out property <int> onboarding: 1;
+    out property <int> import: 2;
+    out property <int> chats: 3;
+    out property <int> thread: 4;
+    // 5 was the separate compose page; the thread has an inline composer now.
+    out property <int> new-chat: 6;
+    out property <int> contact: 7;
+    out property <int> me: 8;
+    out property <int> error: 9;
+    out property <int> picture: 10;
+    out property <int> accounts: 11;
+}
+
+// Nostr purple on near-black (dark) and on lavender-white (light). Rust sets `dark` from the
+// KeyOS system theme and follows changes live; every colour below derives from it.
+export global S {
+    in property <bool> dark: true;
+
+    // ---- colour ----
+    out property <color> bg: dark ? #0b0812 : #f7f3fd;
+    out property <color> panel: dark ? #151020 : #ffffff;
+    out property <color> panel-hi: dark ? #1e172d : #efe7fb;
+    out property <color> line: dark ? #2a2140 : #e2d6f4;
+    out property <color> line-hi: dark ? #3b2e58 : #cbb9ea;
+    out property <color> text: dark ? #f3eefb : #1b1326;
+    out property <color> muted: dark ? #a497be : #64587d;
+    // Faint text (times, hints, counters) still has to reach 4.5:1 on bg and panel.
+    out property <color> faint: dark ? #958ab2 : #6b5e84;
+    // #8e30eb is the Nostr purple; on black it is lifted so it stays readable as text.
+    out property <color> accent: dark ? #a35cff : #8e30eb;
+    out property <color> accent-text: dark ? #c39bff : #7420d0;
+    out property <color> accent-deep: dark ? #7f3ff0 : #6d1fc9;
+    out property <color> accent-soft: dark ? #a35cff29 : #8e30eb1a;
+    out property <color> on-accent: #ffffff;
+    // Fill behind white labels (primary buttons, the + button, unread badges): the Nostr purple
+    // in both themes, since white on the lifted dark accent is only 3.8:1.
+    out property <color> fill: #8e30eb;
+    out property <color> fill-pressed: #7420d0;
+    out property <color> bubble-in: dark ? #1f1830 : #ffffff;
+    out property <color> bubble-in-line: dark ? #2d2345 : #e2d6f4;
+    out property <color> bubble-out: #8e30eb;
+    out property <color> ok: dark ? #36d49b : #0b774f;
+    out property <color> warn: dark ? #f4b740 : #844d07;
+    out property <color> bad: dark ? #ff5c74 : #b81f3d;
+    // Modal scrim (Foundation's overlay colour).
+    out property <color> overlay: #111111e6;
+
+    // ---- type ----
+    out property <string> mono: "Source Code Pro";
+    out property <string> sans: "Montserrat";
+    out property <length> t-display: 40px;
+    out property <length> t-title-lg: 26px;
+    out property <length> t-title: 22px;
+    out property <length> t-heading: 19px;
+    out property <length> t-row: 17px;
+    out property <length> t-bubble: 17px;
+    out property <length> t-body: 16px;
+    out property <length> t-small: 14px;
+    out property <length> t-meta: 12px;
+    out property <length> t-button: 18px;
+
+    // ---- spacing (4 px base) ----
+    out property <length> s1: 4px;
+    out property <length> s2: 8px;
+    out property <length> s3: 12px;
+    out property <length> s4: 16px;
+    out property <length> s5: 20px;
+    out property <length> s6: 24px;
+    out property <length> s8: 32px;
+    out property <length> gutter: 24px;
+    out property <length> list-inset: 14px;
+    out property <length> top-inset: 40px; // KeyOS status bar
+
+    // ---- shape and size ----
+    out property <length> r-sm: 8px;
+    out property <length> r-md: 12px;
+    out property <length> r-lg: 16px;
+    out property <length> r-xl: 24px;
+    out property <length> r-bubble: 20px;
+    out property <length> radius: 16px;
+    out property <length> header-h: 64px;
+    out property <length> btn-h: 60px;
+    out property <length> btn-h-sm: 48px;
+    out property <length> field-h: 56px;
+    out property <length> touch: 56px;
+    out property <duration> quick: 160ms;
+}
+
+// Rust -> UI
+export global App {
+    in-out property <int> page: 0;
+    in property <bool> sim: false;
+    in property <string> seed-note: "";
+    in property <string> storage-note: "";
+    in property <string> boot-text: "Unlocking your Nostr key…";
+
+    // Identity (the account in use)
+    in property <string> my-npub: "";
+    in property <string> my-npub-short: "";
+    in property <string> my-npub-chunked: "";
+    in property <bool> imported: false;
+    in property <bool> has-identity: false;
+    in property <string> my-name: "";
+    in property <string> my-account-label: "";
+    in property <string> my-initial: "";
+    in property <color> my-tint: #8e30eb;
+    in property <image> my-avatar;
+    in property <bool> my-has-avatar: false;
+    in property <bool> my-has-profile: false;
+    in property <string> my-handle: "";
+    in property <string> my-nip05: "";
+    in property <bool> my-nip05-ok: false;
+    in property <string> my-about: "";
+    in property <string> my-lud16: "";
+    in property <bool> show-profiles: true;
+
+    // Accounts
+    in property <[AccountRow]> accounts;
+    in property <bool> can-add-account: true;
+    in property <string> next-account-label: "";
+
+    // Link to the phone (QuantumLink stand-in in the simulator)
+    in property <bool> link-up: false;
+    in property <bool> synced: false;
+    in property <string> link-title: "";
+    in property <string> link-detail: "";
+    in property <[string]> relays;
+    in property <string> relay-note: "";
+    in property <bool> relay-note-error: false;
+
+    // Chats
+    in property <[ChatRow]> chats;
+    in property <int> unread-total: 0;
+
+    // Open thread
+    in property <string> thread-peer: "";
+    in property <string> thread-name: "";
+    in property <string> thread-subtitle: "";
+    in property <bool> thread-subtitle-verified: false;
+    in property <bool> thread-mono: false;
+    in property <bool> thread-known: false;
+    in property <string> thread-initial: "";
+    in property <color> thread-tint: #8e30eb;
+    in property <image> thread-avatar;
+    in property <bool> thread-has-avatar: false;
+    in property <[MsgRow]> messages;
+    // The message whose action bar is open ("" = none), our reaction on it, and whether it
+    // holds a picture that can be kept.
+    in property <string> selected-id: "";
+    in property <string> selected-emoji: "";
+    in property <bool> selected-can-keep: false;
+    // Ours and refused by the relays: the action bar offers to send it again.
+    in property <bool> selected-failed: false;
+
+    // Composer (inline in the thread). Rust bumps `focus-tick` to put the cursor in it.
+    in property <int> focus-tick: 0;
+    // QA only: pretend the KeyOS on-screen keyboard covers this much of the window.
+    in property <length> test-keyboard: 0px;
+    in-out property <string> compose-text: "";
+    in property <string> compose-error: "";
+    in property <bool> replying: false;
+    in property <string> reply-author: "";
+    in property <string> reply-text: "";
+
+    // New chat
+    in property <[ContactRow]> contacts;
+    in-out property <string> new-npub: "";
+    in-out property <string> new-name: "";
+    in property <string> new-npub-error: "";
+    in property <string> new-error: "";
+    // 0 empty, 1 a key, 2 a name@domain address, 3 neither (yet)
+    in property <int> new-kind: 0;
+    in property <bool> new-looking: false;
+    in property <bool> new-found: false;
+    in property <string> new-found-name: "";
+    in property <string> new-found-npub: "";
+    in property <string> new-found-nip05: "";
+    in property <bool> new-found-verified: false;
+    in property <string> new-found-initial: "";
+    in property <color> new-found-tint: #8e30eb;
+    in property <image> new-found-avatar;
+    in property <bool> new-found-has-avatar: false;
+    in property <string> new-found-contact: "";
+
+    // Contact page
+    in property <string> contact-hex: "";
+    in property <string> contact-title: "";
+    in-out property <string> contact-name: "";
+    in property <string> contact-npub: "";
+    in property <string> contact-npub-short: "";
+    in property <string> contact-npub-chunked: "";
+    in property <bool> contact-saved: false;
+    in property <string> contact-error: "";
+    in property <string> contact-initial: "";
+    in property <color> contact-tint: #8e30eb;
+    in property <image> contact-avatar;
+    in property <bool> contact-has-avatar: false;
+    in property <bool> contact-has-profile: false;
+    in property <string> contact-profile-name: "";
+    in property <string> contact-handle: "";
+    in property <string> contact-nip05: "";
+    in property <bool> contact-nip05-ok: false;
+    in property <string> contact-about: "";
+    in property <string> contact-lud16: "";
+
+    // Picture viewer
+    in property <string> viewer-id: "";
+    in property <string> viewer-title: "";
+    in property <image> viewer-picture;
+    in property <int> viewer-w: 0;
+    in property <int> viewer-h: 0;
+    in property <bool> viewer-kept: false;
+
+    // Import
+    in-out property <string> import-text: "";
+    in property <string> import-error: "";
+
+    // Error / notice page
+    in property <string> error-title: "";
+    in property <string> error-body: "";
+    in property <bool> error-soft: false;
+    // The identity could not be loaded: offer to try again before starting over.
+    in property <bool> error-retry: false;
+
+    // Transient one-line note (toast-like) on the chats page
+    in property <string> toast: "";
+}
+
+// A confirmation the user has to answer before something is destroyed. Pages fill it in;
+// the window shows the modal while `action` is set.
+// Where floating things go. The thread reports the top of its bottom dock (action bar and
+// composer, which grow with the text, the reply quote and the keyboard), so a toast sits above
+// it instead of over the message being typed.
+export global Overlay {
+    in-out property <length> thread-dock-top: 0px;
+}
+
+export global Confirm {
+    in-out property <string> action: "";
+    in-out property <int> slot: 0;
+    in-out property <string> title: "";
+    in-out property <string> body: "";
+    in-out property <string> confirm-label: "";
+    in-out property <bool> critical: false;
+}
+
+// UI -> Rust
+export global Actions {
+    callback create-identity();
+    callback import-nsec(string);
+    callback start-import();         // add an existing account (or the first one)
+    callback scan(int);              // 0: npub for a new chat, 1: nsec to import
+    callback open-chat(string);
+    callback back-to-chats();
+    callback start-compose();          // put the cursor in the thread's message field
+    callback send(string);
+    callback new-chat();
+    callback new-input(string);          // the new-chat field changed
+    callback lookup();                   // resolve the name@domain in the field
+    callback add-chat(string, string);   // npub / address, name (may be empty)
+    callback chat-with(string);          // hex of a saved contact
+    callback open-contact(string);
+    callback save-contact();
+    callback remove-contact();
+    callback delete-chat();
+    callback show-me();
+    callback show-accounts();
+    callback switch-account(int);
+    callback add-account();              // a new key derived from this Passport's seed
+    callback remove-account(int);
+    callback set-show-profiles(bool);
+    callback publish-relays();
+    callback go-home();
+    callback retry-load();
+    // Messages
+    callback select(string);             // tap on a bubble: open / close its action bar
+    callback react(string);              // emoji, on the selected message
+    callback start-reply();              // reply to the selected message
+    callback cancel-reply();
+    callback retry-send();               // the selected (failed) message, again
+    callback load-media(string);         // open the file / load the picture of a message
+    callback open-picture(string);
+    callback close-picture();
+    callback keep-picture(string);
+    callback forget-picture(string);
+    // Save a PNG copy in a folder picked in KeyOS Files (Passport storage, Airlock, USB drive).
+    callback save-picture-copy(string);
+    pure callback byte-len(string) -> int;
+    // Only spaces and line breaks: nothing to send (the core refuses it too).
+    pure callback is-blank(string) -> bool;
+}
+
+// QR rendering, bound in Rust to slint_keyos_platform::qrcode::render.
+export global Utils {
+    pure callback qrcode(string, color, color) -> image;
+}

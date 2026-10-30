@@ -1,0 +1,38 @@
+# Foundation application configuration
+app-name = "nip-ping"
+friendly-app-name = "Sanctum"
+launcher-app-name = "Sanctum"
+description = "Private Nostr DMs (NIP-17) written and read on Passport; the phone only carries gift wraps"
+icon = "resources/icon.svg"
+theme = "resources/theme.json"
+# Never change: KeyOS derives the app seed, and so the Nostr identity, from it.
+app-id = "0x14476b90a96847de1bb9b7f209460ff2"
+min-keyos-version = "1.4.0"
+# The certificate `foundation build` signs with (`foundation cert gen passport-prime-dev` once).
+signing-identity = "passport-prime-dev"
+
+[publisher]
+name = "Arpan Jain"
+contact-email = "arpanjain0001@gmail.com"
+support-url = "https://github.com/bot2048"
+
+[permissions]
+template = ["gui-app", "navigable"]
+# Per-app device secret: the Nostr key (NIP-06) and the storage key derive from it.
+"os/security" = ["GetAppSeed"]
+# A buzz and a purple LED when a message arrives.
+"os/haptics" = ["Vibrate"]
+"os/rgb-server" = ["SetAllTo"]
+# Sealed profile / contacts / inbox files in this app's own AppData (durable writes).
+"os/fs" = ["SeekFile", "WriteFile", "TruncateFile", "Flush", "Rename", "Remove",
+    # "Save a copy to Files": a PNG in a folder the user picks (durable_file_write opens it
+    # read+write, so each place needs both). Prompts once (grantOnFirstUse).
+    "GetUserReadAccess", "GetUserWriteAccess", "GetAirlockReadAccess", "GetAirlockWriteAccess",
+]
+
+# Scanning someone's npub from the Launcher opens a new chat with them.
+[[qr-match-rules]]
+id = "nostr-npub"
+priority = 3
+id-localizations = { en = "Message on Nostr" }
+sub-rules = { qr = { QR = { regex-pattern = "^(nostr:|NOSTR:)?(npub1|NPUB1|nprofile1|NPROFILE1)", min-len = 63 } } }

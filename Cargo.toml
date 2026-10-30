@@ -1,0 +1,67 @@
+[package]
+name = "nip-ping"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+# core/ and tools/ are their own workspaces (so `cd core && cargo test` needs no SDK), as in
+# Foundation's Nostr signer.
+[workspace]
+exclude = [".foundation-sdk", "tools", "core"]
+
+[dependencies]
+nip-ping-core = { path = "core" }
+log = "0.4"
+log-server = { package = "xous-api-log", path = ".foundation-sdk/current/lib/keyos/xous/api/log" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+# Pinned like Foundation's signer app: these are the versions known to build for the device.
+getrandom = "=0.2.10"
+simd-adler32 = "=0.3.7"
+server = { path = ".foundation-sdk/current/lib/keyos/server" }
+slint-keyos-platform = { path = ".foundation-sdk/current/lib/keyos/slint-keyos-platform/runtime" }
+foundation-themes = { path = ".foundation-sdk/current/lib/keyos/sdk/crates/foundation-themes" }
+security = { path = ".foundation-sdk/current/lib/keyos/api/security" }
+haptics = { path = ".foundation-sdk/current/lib/keyos/api/haptics" }
+rgb-led = { path = ".foundation-sdk/current/lib/keyos/api/rgb-led" }
+
+# The phone link in the simulator: a WebSocket server standing in for QuantumLink, which
+# KeyOS 1.4 does not open to third-party apps (QLv2 in KeyOS 1.5). tokio's mio backend does
+# not build for Xous, so this exists only in hosted builds.
+[target.'cfg(not(target_os = "xous"))'.dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time"] }
+tokio-tungstenite = "0.21"
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
+
+[build-dependencies]
+slint-keyos-platform-build = { path = ".foundation-sdk/current/lib/keyos/slint-keyos-platform/build" }
+
+# Randomness is pre-wired: getrandom 0.2 routes to the TRNG on device.
+[patch.crates-io]
+getrandom = { path = ".foundation-sdk/current/lib/keyos/imports/getrandom" }
+# Keep the whole Slint graph on the SDK's Foundation fork, so two Slint ABIs never meet in
+# one link (from Foundation's signer app).
+slint = { path = ".foundation-sdk/current/lib/slint/api/rs/slint" }
+slint-build = { path = ".foundation-sdk/current/lib/slint/api/rs/build" }
+slint-macros = { path = ".foundation-sdk/current/lib/slint/api/rs/macros" }
+i-slint-common = { path = ".foundation-sdk/current/lib/slint/internal/common" }
+i-slint-compiler = { path = ".foundation-sdk/current/lib/slint/internal/compiler" }
+i-slint-core = { path = ".foundation-sdk/current/lib/slint/internal/core" }
+i-slint-core-macros = { path = ".foundation-sdk/current/lib/slint/internal/core-macros" }
+i-slint-backend-selector = { path = ".foundation-sdk/current/lib/slint/internal/backends/selector" }
+i-slint-renderer-software = { path = ".foundation-sdk/current/lib/slint/internal/renderers/software" }
+const-field-offset = { path = ".foundation-sdk/current/lib/slint/helper_crates/const-field-offset" }
+vtable = { path = ".foundation-sdk/current/lib/slint/helper_crates/vtable" }
+
+# `foundation build` uses the dev profile; unoptimised secp256k1 and PBKDF2 would stall the
+# device (SDK MIGRATIONS.md gotcha #16).
+[profile.dev.package."*"]
+opt-level = 3
+[profile.dev.package.nip-ping-core]
+opt-level = 3
+# Line tables only: full debug info makes the link (and the disk it needs) several times larger.
+[profile.dev]
+debug = "line-tables-only"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(keyos)'] }

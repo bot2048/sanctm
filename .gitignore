@@ -1,0 +1,31 @@
+# Build output
+target/
+
+# Made by the Foundation SDK on each machine
+.foundation-sdk/
+ui/ui
+ui/gen/
+manifest.toml
+screenshots/
+
+# Coding-agent files the SDK scaffolds (not part of the app)
+AGENTS.md
+.mcp.json
+.claude/
+.agents/
+
+# Local testing and demo material (kept on the developer's machine, not part of the app)
+tools/
+core/tests/
+core/examples/
+docs/TESTING.md
+docs/DEMO.md
+node_modules/
+*.key
+.peer-key
+*.log
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store

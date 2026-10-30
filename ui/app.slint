@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import { Theme, UISize, Images } from "@ui/theme.slint";
+import { S, App, Actions, Utils, Pages, Confirm, Overlay, ChatRow, MsgRow, ContactRow, AccountRow, ReactionRow } from "state.slint";
+import { LoadingPage, OnboardingPage, ImportPage } from "pages/start.slint";
+import { ChatsPage } from "pages/chats.slint";
+import { ThreadPage } from "pages/thread.slint";
+import { NewChatPage, ContactPage, MePage, AccountsPage } from "pages/people.slint";
+import { ErrorPage } from "pages/notice.slint";
+import { PicturePage } from "pages/picture.slint";
+import { ConfirmModal } from "widgets.slint";
+
+export { Theme, Images, App, Actions, Utils, Confirm, ChatRow, MsgRow, ContactRow, AccountRow, ReactionRow }
+// The palette global is S in .slint files and Palette in Rust (one-letter Rust type names are risky).
+export { S as Palette }
+
+export component AppWindow inherits Window {
+    title: "Sanctum";
+    preferred-width: UISize.screen-width;
+    preferred-height: UISize.screen-height;
+    background: S.bg;
+    default-font-family: S.sans;
+    // KeyOS reports the area its keyboard covers (the window is not resized).
+    property <length> keyboard: max(root.virtual-keyboard-size.height, App.test-keyboard);
+
+    if App.page == Pages.loading: LoadingPage {
+        width: parent.width;
+        height: parent.height;
+    }
+    if App.page == Pages.onboarding: OnboardingPage {
+        width: parent.width;
+        height: parent.height;
+    }
+    if App.page == Pages.import: ImportPage {
+        width: parent.width;
+        height: parent.height;
+        keyboard: root.keyboard;
+    }
+    if App.page == Pages.chats: ChatsPage {
+        width: parent.width;
+        height: parent.height;
+    }
+    if App.page == Pages.thread: ThreadPage {
+        width: parent.width;
+        height: parent.height;
+        // The composer sits above the keyboard.
+        keyboard: root.keyboard;
+    }
+    if App.page == Pages.new-chat: NewChatPage {
+        width: parent.width;
+        height: parent.height;
+        keyboard: root.keyboard;
+    }
+    if App.page == Pages.contact: ContactPage {
+        width: parent.width;
+        height: parent.height;
+        keyboard: root.keyboard;
+    }
+    if App.page == Pages.me: MePage {
+        width: parent.width;
+        height: parent.height;
+    }
+    if App.page == Pages.accounts: AccountsPage {
+        width: parent.width;
+        height: parent.height;
+    }
+    if App.page == Pages.picture: PicturePage {
+        width: parent.width;
+        height: parent.height;
+    }
+    if App.page == Pages.error: ErrorPage {
+        width: parent.width;
+        height: parent.height;
+    }
+
+    // The chats list shows the toast inline; on other pages it floats above the bottom bar,
+    // so a message from someone else (or the result of an action) is not missed.
+    if App.toast != "" && App.page != Pages.chats && App.page != Pages.loading && App.page != Pages.onboarding && App.page != Pages.error && Confirm.action == "": Rectangle {
+        x: S.gutter;
+        // On the picture page it sits under the header, clear of the Save button and sheet.
+        y: App.page == Pages.thread ? Overlay.thread-dock-top - S.s3 - self.height : App.page == Pages.picture ? S.top-inset + S.header-h + S.s3 : parent.height - S.s6 - self.height;
+        width: parent.width - 2 * S.gutter;
+        height: toast-text.preferred-height + 2 * S.s3;
+        background: S.panel;
+        border-radius: S.r-md;
+        border-width: 1px;
+        border-color: S.accent.with-alpha(0.6);
+        drop-shadow-blur: 14px;
+        drop-shadow-color: #00000040;
+        toast-text := Text {
+            x: S.s4;
+            width: parent.width - 2 * S.s4;
+            text: App.toast;
+            color: S.accent-text;
+            font-family: S.sans;
+            font-size: S.t-small;
+            font-weight: 600;
+            wrap: word-wrap;
+        }
+    }
+
+    // Anything that destroys something is confirmed here first.
+    if Confirm.action != "": ConfirmModal {
+        width: parent.width;
+        height: parent.height;
+        title: Confirm.title;
+        body: Confirm.body;
+        confirm-label: Confirm.confirm-label;
+        critical: Confirm.critical;
+        cancel => {
+            Confirm.action = "";
+        }
+        confirm => {
+            if Confirm.action == "remove-contact" {
+                Actions.remove-contact();
+            } else if Confirm.action == "delete-chat" {
+                Actions.delete-chat();
+            } else if Confirm.action == "remove-account" {
+                Actions.remove-account(Confirm.slot);
+            } else if Confirm.action == "forget-picture" {
+                Actions.forget-picture(App.viewer-id);
+            }
+            Confirm.action = "";
+        }
+    }
+}

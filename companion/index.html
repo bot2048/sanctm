@@ -1,0 +1,915 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Sanctum companion</title>
+<style>
+  :root {
+    --bg: #0b0812; --panel: #151020; --panel-hi: #1e172d; --line: #2a2140; --line-hi: #3b2e58;
+    --text: #f3eefb; --muted: #a497be; --faint: #8a7fa8; --accent: #a35cff; --accent-text: #c39bff;
+    --accent-strong: #8e30eb; --accent-soft: rgba(163,92,255,.14); --on-accent: #fff; --ok: #36d49b; --warn: #f4b740; --bad: #ff5c74;
+    --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f3fd; --panel: #ffffff; --panel-hi: #efe7fb; --line: #e2d6f4; --line-hi: #cbb9ea;
+      --text: #1b1326; --muted: #64587d; --faint: #776a90; --accent: #8e30eb; --accent-text: #7420d0;
+      --accent-soft: rgba(142,48,235,.09); --ok: #11875a; --warn: #a8650e; --bad: #cc2445;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans); }
+  main { max-width: 560px; margin: 0 auto; padding: 18px 16px 40px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  header svg { flex: none; }
+  h1 { font-size: 19px; letter-spacing: 2.5px; margin: 0; font-weight: 800; }
+  .sub { color: var(--muted); font-size: 13px; }
+  h2 { font-size: 12px; letter-spacing: 1.6px; color: var(--muted); margin: 22px 0 10px; font-weight: 700; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 10px; }
+  .card.live { border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .grow { flex: 1; min-width: 0; }
+  .dot { width: 10px; height: 10px; border-radius: 5px; background: var(--faint); flex: none; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 18%, transparent); }
+  .dot.wait { background: var(--warn); }
+  .dot.bad { background: var(--bad); }
+  .title { font-weight: 700; }
+  .npub { font: 13px/1.4 var(--mono); color: var(--accent-text); word-break: break-all; margin-top: 8px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .relay { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font: 13px var(--mono); }
+  .relay:first-child { border-top: 0; }
+  .relay .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .relay .why { flex: none; color: var(--faint); font: 12px var(--sans); white-space: nowrap; }
+  .log { font: 12.5px/1.5 var(--mono); max-height: 320px; overflow: auto; }
+  .log div { padding: 5px 0; border-top: 1px solid var(--line); color: var(--muted); word-break: break-word; }
+  .log div:first-child { border-top: 0; }
+  .log b { color: var(--text); font-weight: 600; }
+  .log .in b { color: var(--accent-text); }
+  .log .bad b { color: var(--bad); }
+  .log time { color: var(--faint); margin-right: 8px; }
+  button { font: 600 14px var(--sans); border-radius: 10px; padding: 10px 14px; border: 1px solid var(--line-hi);
+           background: var(--panel-hi); color: var(--text); cursor: pointer; min-height: 44px; }
+  button.primary { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  textarea, input { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line-hi);
+                    border-radius: 10px; padding: 10px; font: 13px/1.4 var(--mono); margin-top: 6px; }
+  textarea { min-height: 110px; resize: vertical; }
+  input { min-height: 44px; }
+  @media (max-width: 600px) { textarea, input { font-size: 16px; } } /* below 16px iOS Safari zooms on focus */
+  details { color: var(--muted); font-size: 14px; margin-top: 10px; }
+  summary { cursor: pointer; padding: 12px 0; }
+  #settingsMsg { margin-top: 8px; font-size: 13px; overflow-wrap: anywhere; }
+  #settingsMsg.bad { color: var(--bad); }
+  .qr { background: #fff; border-radius: 14px; padding: 12px; margin-top: 12px; text-align: center; }
+  .qr img { width: 100%; max-width: 300px; image-rendering: pixelated; display: block; margin: 0 auto; }
+  .hidden { display: none !important; }
+  .badge { font: 700 11px var(--sans); letter-spacing: 1px; padding: 3px 8px; border-radius: 10px;
+           background: var(--accent-soft); color: var(--accent-text); }
+  .seen { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .seen div { background: var(--panel-hi); border-radius: 12px; padding: 10px 8px; text-align: center; min-width: 0; }
+  .seen b { display: block; font: 700 20px/1.2 var(--sans); color: var(--text); }
+  .seen span { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.3; margin-top: 2px; }
+  .seen .zero b { color: var(--ok); }
+  .me { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+  .me img { width: 40px; height: 40px; border-radius: 20px; object-fit: cover; flex: none; background: var(--panel-hi); }
+  .me .who { font-weight: 700; overflow-wrap: anywhere; }
+  .me .muted { overflow-wrap: anywhere; } /* a long NIP-05 overflowed the card at 320 px */
+  @media (max-width: 360px) { .seen { grid-template-columns: repeat(2, 1fr); } }
+  footer { margin-top: 26px; color: var(--faint); font-size: 13px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg width="42" height="42" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6.2 3.5 H17.8 C19.6 3.5 21 4.9 21 6.7 V13.6 C21 15.4 19.6 16.8 17.8 16.8 H11.6 L8 19.8 V16.8 H6.2 C4.4 16.8 3 15.4 3 13.6 V6.7 C3 4.9 4.4 3.5 6.2 3.5 Z" fill="#8E30EB" stroke="#B98AFF" stroke-width="0.8" stroke-linejoin="round"/>
+      <path d="M10.3 9.4 V8.3 C10.3 7.3 11.1 6.6 12 6.6 C12.9 6.6 13.7 7.3 13.7 8.3 V9.4" stroke="#fff" stroke-width="1.1" stroke-linecap="round" fill="none"/>
+      <rect x="9.2" y="9.2" width="5.6" height="4.4" rx="1" fill="#fff"/>
+      <circle cx="12" cy="11" r="0.75" fill="#8E30EB"/>
+    </svg>
+    <div>
+      <h1>SANCTUM</h1>
+      <div class="sub">Nostr DMs companion · carries gift wraps, never messages</div>
+    </div>
+  </header>
+
+  <div class="card" id="passportCard">
+    <div class="row">
+      <span class="dot" id="pDot"></span>
+      <div class="grow">
+        <div class="title" id="pTitle">Looking for your Passport…</div>
+        <div class="muted" id="pSub"></div>
+      </div>
+      <span class="badge hidden" id="syncBadge">SYNCED</span>
+    </div>
+    <div class="me hidden" id="meRow"><img id="meImg" alt=""><div class="grow"><div class="who" id="meName"></div><div class="muted" id="meNip05"></div></div></div>
+    <div class="npub hidden" id="npub"></div>
+    <div class="row hidden" id="npubActions" style="margin-top:10px">
+      <button id="copyNpub">Copy npub</button>
+      <button id="qrNpub">Show QR</button>
+    </div>
+    <div class="qr hidden" id="qrBox"><img id="qrImg" alt="QR code of your npub"></div>
+  </div>
+
+  <h2>RELAYS</h2>
+  <div class="card" id="relayList"></div>
+
+  <h2>WHAT THIS PAGE HAS SEEN</h2>
+  <div class="card seen" id="seen">
+    <div><b id="seenIn">0</b><span>gift wraps in</span></div>
+    <div><b id="seenOut">0</b><span>gift wraps out</span></div>
+    <div><b id="seenFiles">0</b><span>encrypted files</span></div>
+    <div class="zero"><b>0</b><span>words or keys</span></div>
+  </div>
+
+  <h2>ACTIVITY</h2>
+  <div class="card log" id="log"><div>Nothing yet. Gift wraps for your Passport and the ones it sends show up here, as sizes only.</div></div>
+
+  <details>
+    <summary>Settings</summary>
+    <div style="margin-top:8px">Relays (one per line):</div>
+    <textarea id="relaysEdit" spellcheck="false"></textarea>
+    <div style="margin-top:10px">Passport link (simulator stand-in for QuantumLink):</div>
+    <input id="linkUrl" spellcheck="false">
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="saveSettings">Save and reconnect</button>
+      <button id="resetSettings">Defaults</button>
+    </div>
+    <div id="settingsMsg" class="muted" role="status"></div>
+  </details>
+
+  <footer>
+    The Passport seals and gift-wraps every message (NIP-17) and holds the only key.
+    This page sees an npub, one-time-key ciphertext and relay answers. When the Passport shows
+    profiles or loads a picture, it asks this page to fetch them, so this page learns whose
+    profiles and which picture links; encrypted photos stay encrypted until they reach the Passport.
+  </footer>
+</main>
+
+<script src="qrcode.js"></script>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const now = () => Math.floor(Date.now() / 1000);
+  // The project's relay set (used when the page is opened without #relays= and nothing is saved).
+  const DEFAULT_RELAYS = [
+    "wss://eden.nostr.land",
+    "wss://nostr.bitcoiner.social",
+    "wss://nostr.mom",
+    "wss://nostr.walletofsatoshi.com",
+    "wss://nostrelites.org",
+    "wss://pyramid.fiatjaf.com",
+    "wss://relay.damus.io",
+    "wss://relay.mostr.pub",
+    "wss://relay.primal.net",
+    "wss://relay.snort.social",
+    "wss://wot.nostr.party",
+  ];
+  const host = (!location.hostname || location.hostname === "0.0.0.0") ? "localhost" : location.hostname;
+  const DEFAULT_LINK = `ws://${host}:9878`;
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("ndms." + k); return v === null ? d : JSON.parse(v); } catch (_) { return d; } },
+    set(k, v) { try { localStorage.setItem("ndms." + k, JSON.stringify(v)); } catch (_) {} },
+  };
+  // #ws=host:port&relays=wss://a,wss://b overrides the saved settings (handy for demos and tests).
+  // Same grammar as the Passport's valid_relay (core/src/nip17.rs): a relay it would not sign
+  // AUTH for or list in a 10050 is refused here too, with a visible "bad relay" note.
+  const LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?";
+  const RELAY_RE = new RegExp(`^wss?://(?:\\[[0-9A-Fa-f:.]+\\]|${LABEL}(?:\\.${LABEL})*\\.?)(?::(\\d{1,5}))?(?:[/?][A-Za-z0-9\\-._~/?=&%+,;:@!$*()]*)?$`);
+  const validRelay = (u) => { const m = u.length <= 200 && RELAY_RE.exec(u); return !!m && (!m[1] || (+m[1] >= 1 && +m[1] <= 65535)); };
+  const normRelay = (u) => String(u).trim().replace(/\/+$/, "");
+  // Typed without a scheme ("192.168.1.5:9878") or as http(s)://: still a WebSocket URL.
+  const normLink = (s) => { s = String(s || "").trim(); return !s ? DEFAULT_LINK : /^wss?:\/\//i.test(s) ? s : "ws://" + s.replace(/^[a-z]+:\/\//i, ""); };
+  function parseRelays(list) {
+    const ok = [], bad = [];
+    for (const raw of list) {
+      const u = normRelay(raw);
+      if (!u) continue;
+      if (!validRelay(u)) bad.push(u); else if (!ok.includes(u)) ok.push(u);
+    }
+    return { ok, bad };
+  }
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const savedRelays = store.get("relays", DEFAULT_RELAYS);
+  let linkUrl = hash.get("ws") ? normLink(hash.get("ws")) : normLink(store.get("link", DEFAULT_LINK));
+  let relayUrls = parseRelays(hash.get("relays") ? hash.get("relays").split(",")
+    : Array.isArray(savedRelays) ? savedRelays.filter((u) => typeof u === "string") : DEFAULT_RELAYS).ok;
+
+  const short = (u) => u.replace(/^wss?:\/\//, "").replace(/\/$/, "");
+  const kb = (ev) => (JSON.stringify(ev).length / 1024).toFixed(1) + " KB";
+  const isHex = (s, n) => typeof s === "string" && s.length === n && /^[0-9a-f]+$/.test(s);
+  // Relay URLs from a kind 10050 (ours or someone else's), at most 8, normalised.
+  const relayTags = (ev) => !Array.isArray(ev && ev.tags) ? [] : parseRelays(ev.tags
+    .filter((t) => Array.isArray(t) && t[0] === "relay" && typeof t[1] === "string").map((t) => t[1])).ok.slice(0, 8);
+  // The Passport refuses link frames over 128 KB (core/src/link.rs), so bigger wraps are dropped here.
+  const MAX_WRAP_BYTES = 120 * 1024;
+  const isWrapFor = (ev, pk) => ev.kind === 1059 && isHex(ev.id, 64) && isHex(ev.pubkey, 64) && isHex(ev.sig, 128) &&
+    typeof ev.content === "string" && Number.isInteger(ev.created_at) && Array.isArray(ev.tags) &&
+    ev.tags.some((t) => Array.isArray(t) && t[0] === "p" && t[1] === pk) && JSON.stringify(ev).length <= MAX_WRAP_BYTES;
+
+  // ---- activity log -------------------------------------------------------------------
+  let logCount = 0;
+  function log(html, cls) {
+    const box = $("log");
+    if (logCount++ === 0) box.textContent = "";
+    const d = document.createElement("div");
+    if (cls) d.className = cls;
+    const t = document.createElement("time");
+    t.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+    d.append(t);
+    const s = document.createElement("span");
+    s.innerHTML = html; // callers pass escaped text only
+    d.append(s);
+    box.prepend(d);
+    while (box.children.length > 120) box.lastChild.remove();
+    return d;
+  }
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // ---- bech32 (npub display only) ----------------------------------------------------------
+  const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+  function polymod(values) {
+    const G = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+    let chk = 1;
+    for (const v of values) { const b = chk >> 25; chk = ((chk & 0x1ffffff) << 5) ^ v; for (let i = 0; i < 5; i++) if ((b >> i) & 1) chk ^= G[i]; }
+    return chk;
+  }
+  function npub(hex) {
+    const bytes = hex.match(/../g).map((h) => parseInt(h, 16));
+    const data = []; let acc = 0, bits = 0;
+    for (const b of bytes) { acc = (acc << 8) | b; bits += 8; while (bits >= 5) { bits -= 5; data.push((acc >> bits) & 31); } }
+    if (bits) data.push((acc << (5 - bits)) & 31);
+    const hrp = "npub";
+    const exp = [...hrp].map((c) => c.charCodeAt(0) >> 5).concat([0], [...hrp].map((c) => c.charCodeAt(0) & 31));
+    const mod = polymod(exp.concat(data, [0, 0, 0, 0, 0, 0])) ^ 1;
+    const chk = []; for (let i = 0; i < 6; i++) chk.push((mod >> (5 * (5 - i))) & 31);
+    return hrp + "1" + data.concat(chk).map((d) => CHARSET[d]).join("");
+  }
+
+  // ---- relays --------------------------------------------------------------------------------
+  // url -> { ws, state: "connecting"|"open"|"closed", why, eose, authed, pendingAuth, temp }
+  const relays = new Map();
+  const pendingOk = new Map(); // event id -> { results: Map(url -> [ok, msg]), targets, done, timer }
+  // Gift wraps handed to the Passport, keyed by the whole event, not just its id: a relay
+  // that serves a damaged copy first (same id, wrong signature or content) must not keep
+  // the genuine copy from other relays away. The Passport verifies and dedups by id itself.
+  const forwarded = new Set();
+  const wrapKey = (ev) => JSON.stringify([ev.id, ev.pubkey, ev.created_at, ev.tags, ev.content, ev.sig]);
+  let me = null;                // { pk, since }
+  let ownInbox = [], ownInboxAt = 0; // relays from our own kind 10050, and its created_at
+  const inboxCache = new Map(); // pk -> { list, at }
+  let eoseTimer = null, eoseSent = false;
+  let syncRow = null, syncCount = 0; // one summary log row while the initial sync runs
+  const TEMP_IDLE_MS = 15000;   // how long a one-off connection to someone's inbox relay stays open
+
+  function renderRelays() {
+    const box = $("relayList");
+    box.textContent = "";
+    for (const [url, r] of relays) {
+      const d = document.createElement("div"); d.className = "relay";
+      const dot = document.createElement("span");
+      dot.className = "dot " + (r.state === "open" ? (r.authRefused ? "bad" : r.needsAuth && !r.authed ? "wait" : "on") : r.state === "connecting" ? "wait" : "bad");
+      const name = document.createElement("span"); name.className = "name"; name.textContent = short(url) + (r.temp ? (r.lookup ? " (profile lookup)" : " (their inbox)") : "");
+      const why = document.createElement("span"); why.className = "why";
+      why.textContent = r.state === "open" ? (r.authed ? "authenticated" : r.authRefused ? "AUTH refused" : r.needsAuth ? "needs AUTH" : r.eose ? "synced" : "open") : (r.why || r.state);
+      d.append(dot, name, why);
+      box.append(d);
+    }
+    if (!relays.size) box.textContent = "No relays configured.";
+    const pool = [...relays.values()].filter((r) => !r.temp);
+    const up = pool.filter((r) => r.state === "open").length;
+    tellPassport({ t: "relays", up, total: pool.length });
+  }
+
+  function openRelay(url, temp = false) {
+    if (relays.has(url)) return relays.get(url);
+    const r = { ws: null, state: "connecting", why: "", eose: false, authed: false, needsAuth: false, temp, backoff: 2000, busy: 0, usedAt: 0 };
+    relays.set(url, r);
+    const connect = () => {
+      if (relays.get(url) !== r) return; // removed (settings saved) while waiting to reconnect
+      r.state = "connecting"; renderRelays();
+      let ws;
+      try { ws = new WebSocket(url); } catch (e) { r.state = "closed"; r.why = "bad url"; renderRelays(); return; }
+      r.ws = ws;
+      ws.onopen = () => { r.state = "open"; r.why = ""; r.backoff = 2000; renderRelays(); if (!r.temp) subscribe(url); };
+      ws.onclose = () => {
+        r.state = "closed"; r.why = r.why || "disconnected"; r.eose = false; r.authed = false;
+        r.challenge = null; r.authAsked = null; r.authEventId = null; r.authRefused = false; // NIP-42 state is per connection
+        renderRelays();
+        if (relays.get(url) === r && !r.temp) r.timer = setTimeout(connect, r.backoff = Math.min(r.backoff * 2, 60000));
+      };
+      ws.onerror = () => { r.why = "unreachable"; };
+      ws.onmessage = (m) => onRelayMessage(url, r, m.data);
+    };
+    connect();
+    return r;
+  }
+
+  function closeRelay(url) {
+    const r = relays.get(url); if (!r) return;
+    relays.delete(url);
+    clearTimeout(r.timer);
+    try { r.ws && r.ws.close(); } catch (_) {}
+  }
+
+  // Ask the Passport to sign a relay's NIP-42 challenge: once per challenge and key.
+  // Never for a recipient's inbox relay (temp): authenticating there would tell that relay
+  // who sent the gift wrap, and publishing does not need it.
+  function askAuth(url, r) {
+    if (!me || !passportUp() || !r.challenge || r.authed || r.temp) return;
+    const key = me.pk + " " + r.challenge;
+    if (r.authAsked === key) return;
+    r.authAsked = key;
+    tellPassport({ t: "auth", relay: url, challenge: r.challenge });
+  }
+
+  function sendTo(url, msg) {
+    const r = relays.get(url);
+    if (r && r.ws && r.ws.readyState === 1) { r.ws.send(JSON.stringify(msg)); return true; }
+    return false;
+  }
+
+  function subscribe(url) {
+    if (!me) return;
+    const filter = { kinds: [1059], "#p": [me.pk] };
+    if (me.since) filter.since = me.since; else filter.limit = 500;
+    sendTo(url, ["REQ", "dms", filter]);
+    sendTo(url, ["REQ", "inbox", { kinds: [10050], authors: [me.pk], limit: 1 }]);
+  }
+
+  function onRelayMessage(url, r, data) {
+    let m; try { m = JSON.parse(data); } catch (_) { return; }
+    if (!Array.isArray(m)) return;
+    const [type] = m;
+    if (type === "EVENT") {
+      const [, sub, ev] = m;
+      if (!ev || typeof ev !== "object" || !me) return;
+      if (sub === "dms") {
+        // Only well-formed wraps p-tagged to the current key; nothing while the Passport is away
+        // (they come back with the resubscription after its next hello).
+        if (!isWrapFor(ev, me.pk) || !passportUp()) return;
+        const k = wrapKey(ev);
+        if (forwarded.has(k)) return;
+        forwarded.add(k);
+        tellPassport({ t: "event", ev, relay: url });
+        logWrap(ev, url);
+      } else if (sub === "inbox" && ev.kind === 10050 && ev.pubkey === me.pk && (ev.created_at || 0) >= ownInboxAt) {
+        const list = relayTags(ev);
+        if (!list.length) return;
+        ownInbox = list; ownInboxAt = ev.created_at || 0;
+        let added = false;
+        for (const u of list) {
+          const known = relays.get(u);
+          if (!known) { openRelay(u); log(`your DM relay list adds ${esc(short(u))}`); added = true; }
+          else if (known.temp) { known.temp = false; if (known.state === "open") subscribe(u); log(`your DM relay list adds ${esc(short(u))}`); added = true; }
+        }
+        // The Passport answers AUTH only for relays named in our hello: tell it the new pool.
+        if (added) sendHello();
+        renderRelays();
+      } else if (String(sub).startsWith("lookup-")) {
+        const q = lookups.get(sub); if (q && (q.accept ? q.accept(ev, url) : (ev.kind === 10050 && ev.pubkey === q.pk))) q.found.push(ev);
+      }
+    } else if (type === "EOSE") {
+      const [, sub] = m;
+      if (sub === "dms") { r.eose = true; renderRelays(); maybeEose(); }
+      if (String(sub).startsWith("lookup-")) { const q = lookups.get(sub); if (q) q.eose(url); }
+    } else if (type === "OK") {
+      const [, id, ok, msg] = m;
+      if (typeof id !== "string") return;
+      if (r.authEventId === id) {
+        r.authed = !!ok; r.authRefused = !ok; r.authEventId = null; renderRelays();
+        if (ok) { log(`AUTH accepted by ${esc(short(url))}`); if (!r.temp) { r.eose = false; subscribe(url); } }
+        else { log(`<b>AUTH refused</b> by ${esc(short(url))}: ${esc(String(msg || "").slice(0, 140))}`, "bad"); maybeEose(); }
+        return;
+      }
+      const p = pendingOk.get(id); if (p) p.result(url, !!ok, String(msg || "").slice(0, 140));
+    } else if (type === "AUTH") {
+      if (typeof m[1] !== "string") return;
+      r.needsAuth = true; r.challenge = m[1]; r.authAsked = null; r.authRefused = false; renderRelays();
+      askAuth(url, r);
+    } else if (type === "CLOSED") {
+      const [, sub, msg] = m;
+      if (String(msg || "").startsWith("auth-required")) {
+        // Inbox relays guard gift wraps behind NIP-42: ask the Passport to sign, then resubscribe.
+        r.needsAuth = true; renderRelays();
+        askAuth(url, r);
+        return;
+      }
+      if (sub === "dms") { r.eose = true; maybeEose(); }
+      if (String(sub).startsWith("lookup-")) { const q = lookups.get(sub); if (q) q.eose(url); }
+    } else if (type === "NOTICE") {
+      log(`notice from ${esc(short(url))}: ${esc(String(m[1]).slice(0, 140))}`);
+    }
+  }
+
+  function maybeEose() {
+    if (eoseSent || !me) return;
+    const pool = [...relays.values()].filter((r) => !r.temp && r.state === "open");
+    // A relay that asked for AUTH only counts once it said yes or no to the current key: before
+    // that its EOSE (e.g. served under the previous persona's AUTH) says nothing about our wraps.
+    if (pool.length && pool.every((r) => r.authRefused || (r.eose && (!r.needsAuth || r.authed)))) sendEose();
+  }
+  // After 7 s, stop waiting for slow or AUTH-refusing relays, but only once at least one relay
+  // really finished: "eose" makes the Passport record last_sync = now, and its next session only
+  // asks for wraps since then (minus 49 h). Claiming a sync with no relay reachable loses DMs.
+  function eoseFallback() {
+    if (eoseSent || !me) return;
+    if ([...relays.values()].some((r) => !r.temp && r.eose)) sendEose();
+    else eoseTimer = setTimeout(eoseFallback, 3000);
+  }
+  function sendEose() {
+    if (eoseSent || !passportUp()) return;
+    eoseSent = true; clearTimeout(eoseTimer);
+    tellPassport({ t: "eose" });
+    $("syncBadge").classList.remove("hidden");
+    if (syncRow) { syncRow.remove(); syncRow = null; }
+    log(`sync finished: ${forwarded.size} gift wrap${forwarded.size === 1 ? "" : "s"} handed to the Passport`);
+  }
+  // Distinct gift wraps (by id) and files (by URL): every hello resyncs and re-forwards the same
+  // wraps, and the Passport re-sends its outbox after a failure.
+  const seen = { in: new Set(), out: new Set(), files: new Set() };
+  function bump(k, id) {
+    if (seen[k].has(id)) return;
+    seen[k].add(id);
+    const el = $(k === "in" ? "seenIn" : k === "out" ? "seenOut" : "seenFiles"); if (el) el.textContent = seen[k].size;
+  }
+  function logWrap(ev, url) {
+    bump("in", ev.id);
+    if (eoseSent) return log(`<b>↓ gift wrap</b> ${kb(ev)} from ${esc(short(url))} → Passport`, "in");
+    syncCount++;
+    if (!syncRow || !syncRow.isConnected) syncRow = log("", "in");
+    syncRow.lastChild.innerHTML = `<b>↓ syncing</b> ${syncCount} gift wrap${syncCount === 1 ? "" : "s"} → Passport`;
+  }
+
+  // ---- inbox relay lookup (kind 10050) --------------------------------------------------------
+  const lookups = new Map(); let lookupN = 0;
+  function inboxRelaysOf(pk) {
+    const c = inboxCache.get(pk);
+    if (c && now() - c.at < 600) return Promise.resolve(c.list);
+    if (me && pk === me.pk && ownInbox.length) return Promise.resolve(ownInbox);
+    return new Promise((resolve) => {
+      const sub = "lookup-" + (++lookupN);
+      const open = [...relays.entries()].filter(([, r]) => !r.temp && r.state === "open").map(([u]) => u);
+      const pendingEose = new Set(open);
+      const q = { pk, found: [], eose: (u) => { pendingEose.delete(u); if (!pendingEose.size) finish(); } };
+      lookups.set(sub, q);
+      const finish = () => {
+        if (!lookups.has(sub)) return;
+        lookups.delete(sub);
+        for (const u of open) sendTo(u, ["CLOSE", sub]);
+        // Newest first. Signatures are not checked here (no secp256k1 in this page): any pool
+        // relay can still lie about someone's DM relays; see the QA report.
+        q.found.sort((a, b) => (Number(b.created_at) || 0) - (Number(a.created_at) || 0));
+        const list = q.found.length ? relayTags(q.found[0]) : [];
+        inboxCache.set(pk, { list, at: now() });
+        resolve(list);
+      };
+      for (const u of open) sendTo(u, ["REQ", sub, { kinds: [10050], authors: [pk], limit: 1 }]);
+      setTimeout(finish, 2500);
+      if (!open.length) finish();
+    });
+  }
+
+  // ---- profiles, NIP-05, pictures and files for the Passport ----------------------------
+  // The Passport asks; this page fetches. Kind 0 events are passed on unmodified (the Passport
+  // checks their signatures); pictures are shrunk to RGBA here; encrypted files are passed on
+  // as ciphertext and only opened on the Passport.
+  const INDEXERS = ["wss://purplepag.es", "wss://relay.damus.io", "wss://relay.nostr.band"];
+  const offline = () => [...relays.keys()].every((u) => /^wss?:\/\/(localhost|127\.0\.0\.1)([:/]|$)/.test(u));
+  const profileCache = new Map(); // hex -> { evs: candidates, newest first, at most one per relay; at }
+  const nip05Cache = new Map();   // address -> { p: Promise<hex|null>, at }
+  const PROFILE_TTL = 600;
+  // A profile frame must fit the Passport's 128 KB frame limit in UTF-8 after JSON escaping.
+  const fitsFrame = (ev) => new TextEncoder().encode(JSON.stringify({ t: "profile", ev, nip05_ok: false })).length <= 120 * 1024;
+  const MAX_CHUNK = 64 * 1024;
+
+  // At most 6 lookups at once: relays cap subscriptions per connection (strfry's default is 20),
+  // and right after a sync the Passport asks for profiles in many small batches.
+  let querying = 0; const queryQueue = [];
+  async function query(...args) {
+    if (querying >= 6) await new Promise((r) => queryQueue.push(r));
+    querying++;
+    try { return await queryNow(...args); } finally { querying--; const next = queryQueue.shift(); if (next) next(); }
+  }
+  // Events matching `filter` from `urls` (opened as temporary connections if needed).
+  async function queryNow(filter, urls, accept, ms = 6000) {
+    const conns = [];
+    for (const u of urls) {
+      let r = relays.get(u);
+      if (!r) { r = openRelay(u, true); r.lookup = true; }
+      r.busy++; r.usedAt = Date.now(); conns.push([u, r]);
+    }
+    await Promise.all(conns.map(([, r]) => waitOpen(r, 3000)));
+    const open = conns.filter(([, r]) => r.state === "open").map(([u]) => u);
+    const found = await new Promise((resolve) => {
+      const sub = "lookup-" + (++lookupN);
+      const pending = new Set(open);
+      const q = { found: [], accept, eose: (u) => { pending.delete(u); if (!pending.size) finish(); } };
+      lookups.set(sub, q);
+      const finish = () => {
+        if (!lookups.has(sub)) return;
+        lookups.delete(sub);
+        for (const u of open) sendTo(u, ["CLOSE", sub]);
+        resolve(q.found);
+      };
+      for (const u of open) sendTo(u, ["REQ", sub, filter]);
+      setTimeout(finish, ms);
+      if (!open.length) finish();
+    });
+    for (const [, r] of conns) { r.busy--; r.usedAt = Date.now(); }
+    setTimeout(sweepTemp, TEMP_IDLE_MS + 100);
+    return found;
+  }
+
+  function nip05Parts(id) {
+    const s = String(id || "").trim().toLowerCase().replace(/^@/, "");
+    const [name, domain] = s.includes("@") ? s.split("@") : ["_", s];
+    if (!/^[a-z0-9._-]{1,64}$/.test(name) || !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain || "")) return null;
+    return { name, domain };
+  }
+
+  async function nip05Lookup(id) {
+    const p = nip05Parts(id);
+    if (!p) throw new Error("not an address");
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+    try {
+      const res = await fetch(`https://${p.domain}/.well-known/nostr.json?name=${encodeURIComponent(p.name)}`, { redirect: "error", signal: ctl.signal, credentials: "omit", cache: "no-store" });
+      if (!res.ok) throw new Error(res.status === 404 ? "not found" : "the server said " + res.status);
+      const j = await res.json();
+      const pk = j && j.names && j.names[p.name];
+      if (!isHex(String(pk || "").toLowerCase(), 64)) throw new Error("not found");
+      return String(pk).toLowerCase();
+    } catch (e) {
+      throw new Error(e.name === "AbortError" ? "timed out" : e.message === "Failed to fetch" ? "no such domain, or it refused" : e.message);
+    } finally { clearTimeout(t); }
+  }
+
+  async function fetchProfiles(pks) {
+    pks = [...new Set((pks || []).filter((k) => isHex(k, 64)))].slice(0, 100);
+    if (!pks.length) return;
+    const todo = pks.filter((k) => { const c = profileCache.get(k); return !c || now() - c.at > PROFILE_TTL; });
+    if (todo.length) {
+      const pool = [...relays.keys()].filter((u) => !relays.get(u).temp);
+      const urls = [...new Set(offline() ? pool : pool.concat(INDEXERS))];
+      const want = new Set(todo);
+      // Newest copy per relay, not overall: signatures are only checked on the Passport, so one
+      // relay serving a forged, newer (or future-dated) kind 0 must not hide the genuine one.
+      const best = new Map();
+      await query({ kinds: [0], authors: todo }, urls, (ev, url) => {
+        if (!(ev.kind === 0 && want.has(ev.pubkey) && isHex(ev.id, 64) && isHex(ev.sig, 128) && typeof ev.content === "string" &&
+              ev.content.length <= 65536 && Number.isInteger(ev.created_at) && ev.created_at <= now() + 900 && fitsFrame(ev))) return false;
+        const k = ev.pubkey + " " + url, old = best.get(k);
+        if (!old || ev.created_at > old.created_at) best.set(k, ev);
+        return false;
+      });
+      for (const k of todo) profileCache.set(k, { evs: [], at: now() });
+      for (const ev of best.values()) { const c = profileCache.get(ev.pubkey); if (!c.evs.some((o) => o.id === ev.id)) c.evs.push(ev); }
+      for (const k of todo) profileCache.get(k).evs.sort((a, b) => b.created_at - a.created_at);
+    }
+    const nip05Of = (ev) => { try { const c = JSON.parse(ev.content); return c && typeof c.nip05 === "string" ? c.nip05 : ""; } catch (_) { return ""; } };
+    // NIP-05 checks in parallel, a few at a time, each address once per 10 minutes.
+    const verify = (ev) => {
+      const q = nip05Of(ev);
+      if (!q) return Promise.resolve(false);
+      let c = nip05Cache.get(q);
+      if (!c || now() - c.at > PROFILE_TTL) { c = { p: nip05Lookup(q).catch(() => null), at: now() }; nip05Cache.set(q, c); }
+      return c.p.then((pk) => pk === ev.pubkey);
+    };
+    // Every candidate goes to the Passport, newest first: it checks signatures and keeps the newest valid one.
+    const found = pks.flatMap((k) => (profileCache.get(k) || { evs: [] }).evs);
+    for (let i = 0; i < found.length; i += 4) {
+      const batch = found.slice(i, i + 4);
+      const oks = await Promise.all(batch.map(verify));
+      batch.forEach((ev, j) => tellPassport({ t: "profile", ev, nip05_ok: oks[j] }));
+    }
+    const mine = me && pks.includes(me.pk) ? (profileCache.get(me.pk) || { evs: [] }).evs : [];
+    if (mine.length) showMe(mine[0], await verify(mine[0])); // unverified here: see the QA report
+    const n = pks.filter((k) => (profileCache.get(k) || { evs: [] }).evs.length).length;
+    if (n) log(`↓ profile${n === 1 ? "" : "s"} ×${n} (signatures checked on Passport)`);
+  }
+
+  // Your own public profile, as the Passport asked for it (all public data).
+  function showMe(ev, ok) {
+    let c = {}; try { c = JSON.parse(ev.content) || {}; } catch (_) {}
+    const full = [...String((typeof c.display_name === "string" && c.display_name.trim()) || (typeof c.name === "string" && c.name.trim()) || "")];
+    const name = full.length > 60 ? full.slice(0, 59).join("") + "…" : full.join("");
+    if (!name && !c.picture) return;
+    $("meName").textContent = name || "Your Nostr profile";
+    $("meNip05").textContent = ok && typeof c.nip05 === "string" ? "✓\u00a0" + c.nip05.replace(/^_@/, "") : "";
+    const pic = typeof c.picture === "string" && /^https?:\/\//i.test(c.picture) ? c.picture : "";
+    $("meImg").classList.toggle("hidden", !pic);
+    if (pic) { $("meImg").referrerPolicy = "no-referrer"; $("meImg").onerror = () => $("meImg").classList.add("hidden"); $("meImg").src = pic; }
+    $("meRow").classList.remove("hidden");
+  }
+
+  const b64 = (bytes) => { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+  function sendChunks(id, bytes, w, h) {
+    const n = Math.max(1, Math.ceil(bytes.length / MAX_CHUNK));
+    for (let i = 0; i < n; i++) tellPassport({ t: "blob", id, seq: i, last: i === n - 1, w, h, data: b64(bytes.subarray(i * MAX_CHUNK, (i + 1) * MAX_CHUNK)) });
+  }
+
+  async function download(url, max) {
+    if (!/^https?:\/\//i.test(url)) throw new Error("not a web link");
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
+    fetchCtls.add(ctl);
+    try {
+      let res;
+      try { res = await fetch(url, { signal: ctl.signal, credentials: "omit", referrerPolicy: "no-referrer" }); }
+      catch (e) { throw new Error(e.name === "AbortError" ? "timed out" : "the server does not allow this"); }
+      if (!res.ok) throw new Error("the server said " + res.status);
+      const len = Number(res.headers.get("content-length") || 0);
+      if (max && len > max) throw new Error("too big");
+      // Read as a stream and stop at the limit (no Content-Length must not mean no limit).
+      const parts = []; let got = 0;
+      const reader = res.body.getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          got += value.length;
+          if (max && got > max) { ctl.abort(); throw new Error("too big"); }
+          parts.push(value);
+        }
+      } catch (e) {
+        // A body that stalls past the timer rejects with the browser's own wording.
+        throw e.message === "too big" ? e : new Error(e.name === "AbortError" ? "timed out" : "connection lost");
+      }
+      const buf = new Uint8Array(got); let o = 0;
+      for (const p of parts) { buf.set(p, o); o += p.length; }
+      return { buf, type: res.headers.get("content-type") || "" };
+    } finally { clearTimeout(t); fetchCtls.delete(ctl); }
+  }
+
+  // At most 4 downloads at once (a sync can ask for dozens of avatars).
+  let active = 0; const waiting = [];
+  // The Passport forgets its fetches when the link drops or the account changes: stop ours too,
+  // or stale downloads keep the 4 slots busy and their chunks land on the next link.
+  let fetchGen = 0; const fetchCtls = new Set();
+  function cancelFetches() {
+    fetchGen++;
+    for (const c of fetchCtls) c.abort();
+    fetchCtls.clear();
+    for (const go of waiting.splice(0)) go();
+  }
+  async function fetchFor(f) {
+    const gen = fetchGen;
+    if (active >= 4) await new Promise((r) => waiting.push(r));
+    if (gen !== fetchGen) return;
+    active++;
+    try { await fetchOne(f, gen); } finally { active--; const next = waiting.shift(); if (next) next(); }
+  }
+
+  async function fetchOne(f, gen) {
+    const id = String(f.id || "");
+    const w = Math.max(1, Math.min(1024, Number(f.w) || 64)), h = Math.max(1, Math.min(1024, Number(f.h) || 64));
+    try {
+      if (f.as === "file") {
+        const { buf } = await download(String(f.url), Number(f.max) || 8 * 1024 * 1024);
+        if (gen !== fetchGen) return;
+        sendChunks(id, buf, 0, 0);
+        bump("files", String(f.url));
+        log(`↓ encrypted file ${(buf.length / 1024).toFixed(0)} KB (opened on Passport)`);
+        return;
+      }
+      const { buf } = await download(String(f.url), 15 * 1024 * 1024);
+      let bmp;
+      try { bmp = await createImageBitmap(new Blob([buf])); } catch (_) { throw new Error("not a picture"); }
+      let sx = 0, sy = 0, sw = bmp.width, sh = bmp.height, tw = w, th = h;
+      if (f.as === "avatar") {
+        const side = Math.min(sw, sh); sx = (sw - side) / 2; sy = (sh - side) / 2; sw = sh = side;
+      } else {
+        const k = Math.min(1, w / sw, h / sh); tw = Math.max(1, Math.round(sw * k)); th = Math.max(1, Math.round(sh * k));
+      }
+      const cv = document.createElement("canvas"); cv.width = tw; cv.height = th;
+      const cx = cv.getContext("2d"); cx.imageSmoothingQuality = "high";
+      cx.drawImage(bmp, sx, sy, sw, sh, 0, 0, tw, th);
+      const px = new Uint8Array(cx.getImageData(0, 0, tw, th).data.buffer);
+      if (gen !== fetchGen) return;
+      sendChunks(id, px, tw, th);
+      if (f.as !== "avatar") log(`↓ picture ${(buf.length / 1024).toFixed(0)} KB`);
+    } catch (e) {
+      if (gen === fetchGen) tellPassport({ t: "blob", id, error: String(e.message || "failed").slice(0, 80) });
+    }
+  }
+
+  function waitOpen(r, ms) {
+    return new Promise((resolve) => {
+      const t0 = Date.now();
+      const tick = () => {
+        if (r.state === "open") return resolve(true);
+        if (r.state === "closed" || Date.now() - t0 > ms) return resolve(false);
+        setTimeout(tick, 100);
+      };
+      tick();
+    });
+  }
+
+  // Close one-off connections to other people's inbox relays once nothing has used them for a while.
+  function sweepTemp() {
+    let closed = 0;
+    for (const [u, r] of relays) if (r.temp && !r.busy && Date.now() - r.usedAt >= TEMP_IDLE_MS) { closeRelay(u); closed++; }
+    if (closed) renderRelays();
+  }
+
+  const inflight = new Set(); // wrap ids being published
+  async function publish(ev, to) {
+    if (!ev || typeof ev.id !== "string") return;
+    // The Passport re-sends its outbox when the link comes back; the attempt already running
+    // answers for both (its ok goes over the current link).
+    if (inflight.has(ev.id)) return;
+    inflight.add(ev.id);
+    try { await publishOnce(ev, to); } finally { inflight.delete(ev.id); }
+  }
+  async function publishOnce(ev, to) {
+    const pool = [...relays.keys()].filter((u) => !relays.get(u).temp);
+    let targets, note;
+    if (ev.kind === 10050) {
+      targets = pool; note = "your relays";
+    } else {
+      const inbox = to ? await inboxRelaysOf(to) : [];
+      if (inbox.length) { targets = inbox; note = (me && to === me.pk) ? "your DM relays" : "their DM relays"; }
+      else { targets = pool; note = (me && to === me.pk) ? "your relays" : "your relays (they published no DM relay list)"; }
+    }
+    // Someone's inbox list is already at most 8 (relayTags); our own pool may be up to 12 (the
+    // Passport's hello cap): 11 default relays sliced to 8 left relay.primal.net, relay.snort.social
+    // and wot.nostr.party without our kind 10050 or our wraps.
+    targets = [...new Set(targets)].slice(0, 12);
+    const results = new Map();
+    const held = [];
+    await new Promise((resolve) => {
+      const t0 = Date.now();
+      const p = {
+        result: (url, ok, msg) => {
+          if (results.has(url)) return;
+          results.set(url, [ok, msg]);
+          if (results.size >= targets.length) return done();
+          // Once one relay has it, don't keep the Passport on "sending" for the full 9 s.
+          if (ok && !p.early) { p.early = true; clearTimeout(timer); timer = setTimeout(done, Math.max(0, Math.min(2500, 9000 - (Date.now() - t0)))); }
+        },
+      };
+      const done = () => { clearTimeout(timer); if (pendingOk.get(ev.id) === p) pendingOk.delete(ev.id); resolve(); };
+      let timer = setTimeout(done, 9000);
+      pendingOk.set(ev.id, p);
+      if (!targets.length) return done();
+      for (const url of targets) {
+        let r = relays.get(url);
+        if (r && r.temp && r.state === "closed" && !r.busy) { closeRelay(url); r = null; } // stale one-off: dial again
+        r = r || openRelay(url, true);
+        r.busy++; held.push(r);
+        waitOpen(r, 4000).then((ok) => {
+          if (!ok) return p.result(url, false, "unreachable");
+          if (!sendTo(url, ["EVENT", ev])) p.result(url, false, "not connected");
+        });
+      }
+    });
+    for (const r of held) { r.busy--; r.usedAt = Date.now(); }
+    const accepted = [...results].filter(([, [ok]]) => ok).map(([u]) => u);
+    const failed = [...results].filter(([, [ok]]) => !ok).map(([u, [, msg]]) => `${short(u)}: ${msg || "refused"}`);
+    for (const u of targets) if (!results.has(u)) failed.push(`${short(u)}: timeout`);
+    tellPassport({ t: "ok", id: ev.id, accepted, failed });
+    const what = ev.kind === 1059 ? (me && to === me.pk ? "your own copy" : "gift wrap") : ev.kind === 10050 ? "DM relay list" : `kind ${ev.kind}`;
+    if (ev.kind === 1059) bump("out", ev.id);
+    log(`<b>↑ ${esc(what)}</b> ${kb(ev)} → ${accepted.length}/${targets.length} ${esc(note)}`, accepted.length ? "" : "bad");
+    setTimeout(sweepTemp, TEMP_IDLE_MS + 50);
+  }
+
+  // ---- Passport link -----------------------------------------------------------------------
+  let passport = null, retry = null;
+  const passportUp = () => passport && passport.readyState === 1;
+  function tellPassport(obj) { if (passportUp()) passport.send(JSON.stringify(obj)); }
+  const sendHello = () => tellPassport({ t: "hello", v: 1, client: "Browser companion", now: now(), relays: [...relays.keys()].filter((u) => !relays.get(u).temp) });
+
+  function setPassport(state, title, sub) {
+    $("pDot").className = "dot " + state;
+    $("pTitle").textContent = title;
+    $("pSub").textContent = sub || "";
+    $("passportCard").classList.toggle("live", state === "on");
+  }
+
+  function connectPassport() {
+    clearTimeout(retry);
+    cancelFetches();
+    try { passport && passport.close(); } catch (_) {}
+    setPassport("wait", "Looking for your Passport…", linkUrl);
+    let ws;
+    try { ws = new WebSocket(linkUrl); } catch (_) { retry = setTimeout(connectPassport, 2000); return; }
+    passport = ws;
+    ws.onopen = () => {
+      setPassport("on", "Passport linked", "Waiting for its npub…");
+      sendHello();
+      renderRelays();
+    };
+    ws.onclose = () => {
+      if (passport !== ws) return;
+      setPassport("bad", "Passport not linked", `Start Sanctum in the simulator. Retrying ${linkUrl}`);
+      cancelFetches();
+      clearTimeout(eoseTimer); eoseSent = false; $("syncBadge").classList.add("hidden");
+      retry = setTimeout(connectPassport, 2000);
+    };
+    ws.onerror = () => {};
+    ws.onmessage = (m) => {
+      let f; try { f = JSON.parse(m.data); } catch (_) { return; }
+      if (f.t === "hello" && /^[0-9a-f]{64}$/.test(f.pubkey || "")) {
+        const prev = me && me.pk;
+        const changed = !me || me.pk !== f.pubkey;
+        me = { pk: f.pubkey, since: Number(f.since) || 0 };
+        const n = npub(me.pk);
+        setPassport("on", "Passport linked", "Signs and opens everything itself");
+        $("npub").textContent = n; $("npub").classList.remove("hidden"); $("npubActions").classList.remove("hidden");
+        if (changed) {
+          ownInbox = []; ownInboxAt = 0; $("qrBox").classList.add("hidden"); $("qrNpub").textContent = "Show QR";
+          $("meRow").classList.add("hidden"); $("meImg").removeAttribute("src");
+          cancelFetches();
+          // NIP-42 auth is per key: a new account must prove itself to every relay again.
+          for (const r of relays.values()) { r.authed = false; r.authEventId = null; r.authRefused = false; }
+          // A relay links every key that subscribes or authenticates on one connection: give the new
+          // account fresh connections, and drop the previous account's DM relays (its kind 10050)
+          // from the pool. Both accounts still share this browser's IP address.
+          if (prev) { startRelays(); sendHello(); }
+          log(`Passport identity <b>${esc(n.slice(0, 18))}…</b>`);
+        }
+        // Every hello starts a fresh sync from its `since`: the Passport drops wraps it already
+        // has, and anything that arrived while it was away (or before it was reset) comes back.
+        forwarded.clear(); syncRow = null; syncCount = 0;
+        eoseSent = false; $("syncBadge").classList.add("hidden");
+        for (const [u, r] of relays) {
+          r.eose = false; r.authAsked = null;
+          if (!r.temp && r.state === "open") subscribe(u);
+          askAuth(u, r);
+        }
+        clearTimeout(eoseTimer); eoseTimer = setTimeout(eoseFallback, 7000);
+        renderRelays();
+      } else if (f.t === "publish") {
+        publish(f.ev, f.to);
+      } else if (f.t === "auth" && f.ev && f.ev.kind === 22242) {
+        const url = (f.ev.tags.find((t) => t[0] === "relay") || [])[1];
+        const r = relays.get(url);
+        if (r) { r.authEventId = f.ev.id; sendTo(url, ["AUTH", f.ev]); log(`AUTH for ${esc(short(url))} signed on Passport`); }
+      } else if (f.t === "ping") {
+        tellPassport({ t: "pong" });
+      } else if (f.t === "profiles" && Array.isArray(f.pks)) {
+        fetchProfiles(f.pks).catch(() => {});
+      } else if (f.t === "nip05" && typeof f.q === "string") {
+        nip05Lookup(f.q).then((pubkey) => tellPassport({ t: "nip05", q: f.q, pubkey }), (e) => tellPassport({ t: "nip05", q: f.q, error: e.message }));
+      } else if (f.t === "fetch" && typeof f.id === "string" && typeof f.url === "string") {
+        fetchFor(f);
+      }
+    };
+  }
+  setInterval(() => tellPassport({ t: "ping" }), 20000);
+
+  // ---- UI --------------------------------------------------------------------------------
+  function copy(text, btn) {
+    const label = btn.dataset.label || (btn.dataset.label = btn.textContent);
+    const done = () => { clearTimeout(btn._t); btn.textContent = "Copied"; btn._t = setTimeout(() => (btn.textContent = label), 1200); };
+    const fallback = () => {
+      const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select(); try { if (document.execCommand("copy")) done(); } catch (_) {} ta.remove();
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+  }
+  $("copyNpub").onclick = () => me && copy(npub(me.pk), $("copyNpub"));
+  $("qrNpub").onclick = () => {
+    if (!me) return;
+    const box = $("qrBox");
+    if (!box.classList.contains("hidden")) { box.classList.add("hidden"); $("qrNpub").textContent = "Show QR"; return; }
+    const qr = qrcode(0, "M"); qr.addData("nostr:" + npub(me.pk), "Byte"); qr.make();
+    $("qrImg").src = qr.createDataURL(8, 4); box.classList.remove("hidden"); $("qrNpub").textContent = "Hide QR";
+  };
+
+  function startRelays() {
+    for (const u of [...relays.keys()]) closeRelay(u);
+    for (const u of relayUrls) if (validRelay(u)) openRelay(u);
+    renderRelays();
+  }
+  $("relaysEdit").value = relayUrls.join("\n");
+  $("linkUrl").value = linkUrl;
+  const settingsMsg = (text, bad) => { $("settingsMsg").textContent = text; $("settingsMsg").classList.toggle("bad", !!bad); };
+  $("saveSettings").onclick = () => {
+    const { ok, bad } = parseRelays($("relaysEdit").value.split(/[\n,]+/));
+    const newLink = normLink($("linkUrl").value);
+    relayUrls = ok;
+    store.set("relays", relayUrls); store.set("link", newLink);
+    $("relaysEdit").value = relayUrls.join("\n"); $("linkUrl").value = newLink;
+    settingsMsg(bad.length ? `Saved. Ignored (not a ws:// or wss:// relay URL): ${bad.join(", ")}` : "Saved.", bad.length);
+    // A #ws= / #relays= override would beat the saved settings on the next load.
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    startRelays();
+    if (newLink !== linkUrl || !passportUp()) { linkUrl = newLink; connectPassport(); }
+    else sendHello(); // same link: just tell the Passport the new relay list
+  };
+  $("resetSettings").onclick = () => {
+    $("relaysEdit").value = DEFAULT_RELAYS.join("\n"); $("linkUrl").value = DEFAULT_LINK;
+    settingsMsg("Defaults filled in. Save to use them.");
+  };
+
+  startRelays();
+  connectPassport();
+})();
+</script>
+</body>
+</html>

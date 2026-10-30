@@ -1,0 +1,192 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import { Images } from "@ui/theme.slint";
+import { S, App, Actions, Confirm } from "../state.slint";
+import { Header, Btn, LockIcon, ChevronIcon } from "../widgets.slint";
+
+// One way to save, in the Save sheet: icon, what it does, where the picture ends up.
+component SaveOption inherits Rectangle {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> detail;
+    in property <bool> done: false;
+    callback clicked();
+    height: max(76px, lay.preferred-height);
+    background: ta.pressed ? S.panel-hi : S.bg;
+    border-radius: S.r-lg;
+    border-width: 1px;
+    border-color: root.done ? S.ok.with-alpha(0.5) : S.line-hi;
+    lay := HorizontalLayout {
+        padding: S.s4;
+        spacing: S.s4;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                border-radius: 22px;
+                background: S.accent-soft;
+                Image {
+                    width: 24px;
+                    height: 24px;
+                    source: root.icon;
+                    image-fit: contain;
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 3px;
+            horizontal-stretch: 1;
+            Text {
+                text: root.title;
+                color: root.done ? S.ok : S.text;
+                font-family: S.sans;
+                font-size: S.t-row;
+                font-weight: 700;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.detail;
+                color: S.muted;
+                font-family: S.sans;
+                font-size: 13px;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            ChevronIcon {
+                width: 18px;
+                height: 18px;
+            }
+        }
+    }
+    ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// A picture from a chat, as big as the screen allows, and a Save button with the places it
+// can go: sealed in Sanctum, or a plain PNG copy in a folder picked in KeyOS Files.
+export component PicturePage inherits Rectangle {
+    background: S.bg;
+    property <bool> sheet: false;
+    property <length> box-w: root.width - 2 * S.gutter;
+    property <length> box-h: root.height - S.top-inset - S.header-h - 190px;
+    // Fit the box; enlarge at most 1.25x (the phone sends at most 360 x 480).
+    property <float> scale: App.viewer-w > 0 && App.viewer-h > 0 ? min(1.25, box-w / (App.viewer-w * 1px), box-h / (App.viewer-h * 1px)) : 1.0;
+    VerticalLayout {
+        padding-top: S.top-inset;
+        Header {
+            title: App.viewer-title;
+            back => {
+                Actions.close-picture();
+            }
+        }
+        Rectangle {
+            vertical-stretch: 1;
+            Image {
+                width: App.viewer-w * 1px * root.scale;
+                height: App.viewer-h * 1px * root.scale;
+                source: App.viewer-picture;
+                image-fit: fill;
+            }
+        }
+        Rectangle {
+            height: 1px;
+            background: S.line;
+        }
+        // Pinned to the bottom: spare height goes to the picture's area, not under the text.
+        VerticalLayout {
+            vertical-stretch: 0;
+            padding-left: S.gutter;
+            padding-right: S.gutter;
+            padding-top: S.s4;
+            padding-bottom: 28px;
+            spacing: S.s3;
+            Btn {
+                text: "Save…";
+                clicked => {
+                    root.sheet = true;
+                }
+            }
+            Text {
+                text: App.viewer-kept ? "Kept in Sanctum, sealed: it shows without the phone." : "Keep it sealed in Sanctum, or save a copy to Files.";
+                color: App.viewer-kept ? S.ok : S.faint;
+                font-family: S.sans;
+                font-size: S.t-meta;
+                font-weight: 600;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
+        }
+    }
+    // The Save sheet.
+    if root.sheet: Rectangle {
+        background: S.overlay;
+        TouchArea {
+            clicked => {
+                root.sheet = false;
+            }
+        }
+        Rectangle {
+            y: parent.height - self.height;
+            height: sheet-lay.preferred-height;
+            background: S.panel;
+            border-top-left-radius: S.r-xl;
+            border-top-right-radius: S.r-xl;
+            border-width: S.dark ? 1px : 0px;
+            border-color: S.line;
+            TouchArea { }
+            sheet-lay := VerticalLayout {
+                padding: S.gutter;
+                padding-bottom: 28px;
+                spacing: S.s3;
+                Text {
+                    text: "Save picture";
+                    color: S.text;
+                    font-family: S.sans;
+                    font-size: S.t-title;
+                    font-weight: 700;
+                }
+                SaveOption {
+                    icon: Images.image("lock-p");
+                    title: App.viewer-kept ? "Kept in Sanctum" : "Keep in Sanctum";
+                    detail: App.viewer-kept ? "Sealed on this Passport. Tap to remove it from Sanctum." : "Sealed with this Passport's key. Only Sanctum opens it, and it shows without the phone (up to 30).";
+                    done: App.viewer-kept;
+                    clicked => {
+                        if App.viewer-kept {
+                            Confirm.title = "Remove from Sanctum?";
+                            Confirm.body = "The sealed copy on this Passport is deleted. The picture opens again only while your phone can fetch it.";
+                            Confirm.confirm-label = "Remove";
+                            Confirm.critical = true;
+                            Confirm.action = "forget-picture";
+                        } else {
+                            Actions.keep-picture(App.viewer-id);
+                        }
+                        root.sheet = false;
+                    }
+                }
+                SaveOption {
+                    icon: Images.image("md-file-p");
+                    title: "Save a copy to Files";
+                    detail: "Pick a folder in Passport storage, the Airlock (to copy it to a computer over USB) or a USB drive. A plain PNG: other apps can open it.";
+                    clicked => {
+                        root.sheet = false;
+                        Actions.save-picture-copy(App.viewer-id);
+                    }
+                }
+                Btn {
+                    text: "Cancel";
+                    kind: 1;
+                    clicked => {
+                        root.sheet = false;
+                    }
+                }
+            }
+        }
+    }
+}

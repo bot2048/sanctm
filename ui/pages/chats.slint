@@ -1,0 +1,276 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import { Images } from "@ui/theme.slint";
+import { S, App, Actions, Pages, ChatRow } from "../state.slint";
+import { Logo, UserIcon, Eyebrow, Body, Panel, Pill, Badge, Avatar, Btn, EmptyState } from "../widgets.slint";
+
+component ChatItem inherits Rectangle {
+    in property <ChatRow> chat;
+    callback open();
+    // Width of the time column: "now" up to "Sep 25 2025" (older than this year).
+    property <length> side: max(62px, when.preferred-width);
+    height: 80px;
+    background: ta.pressed ? S.panel-hi : S.panel;
+    border-radius: S.r-lg;
+    border-width: 1px;
+    border-color: root.chat.unread > 0 ? S.accent.with-alpha(0.55) : S.line;
+    ta := TouchArea {
+        clicked => {
+            root.open();
+        }
+    }
+    Avatar {
+        x: S.s4;
+        size: 48px;
+        initial: root.chat.initial;
+        tint: root.chat.tint;
+        picture: root.chat.avatar;
+        has-picture: root.chat.has-avatar;
+    }
+    VerticalLayout {
+        x: 78px;
+        width: parent.width - 78px - root.side - S.s5;
+        alignment: center;
+        spacing: S.s1;
+        HorizontalLayout {
+            spacing: S.s2;
+            Text {
+                text: root.chat.name;
+                color: S.text;
+                font-family: root.chat.mono ? S.mono : S.sans;
+                font-size: root.chat.mono ? 15px : S.t-row;
+                font-weight: 700;
+                overflow: elide;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+            }
+            if !root.chat.known: VerticalLayout {
+                alignment: center;
+                Badge {
+                    text: "NEW";
+                }
+            }
+        }
+        Text {
+            text: root.chat.preview;
+            color: root.chat.unread > 0 ? S.text : S.muted;
+            font-family: S.sans;
+            font-size: S.t-small;
+            font-weight: root.chat.unread > 0 ? 600 : 400;
+            overflow: elide;
+        }
+    }
+    VerticalLayout {
+        x: parent.width - S.s4 - root.side;
+        width: root.side;
+        alignment: center;
+        spacing: 6px;
+        when := Text {
+            text: root.chat.when;
+            color: root.chat.unread > 0 ? S.accent-text : S.faint;
+            font-family: S.sans;
+            font-size: S.t-meta;
+            font-weight: 600;
+            horizontal-alignment: right;
+        }
+        // Always reserve the badge row, so the time sits at the same height in every row.
+        HorizontalLayout {
+            alignment: end;
+            height: 24px;
+            if root.chat.unread > 0: Rectangle {
+                width: max(24px, n.preferred-width + 14px);
+                height: 24px;
+                border-radius: 12px;
+                background: S.fill;
+                n := Text {
+                    text: root.chat.unread > 99 ? "99+" : root.chat.unread;
+                    color: S.on-accent;
+                    font-family: S.sans;
+                    font-size: S.t-meta;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+export component ChatsPage inherits Rectangle {
+    background: S.bg;
+    property <bool> empty: App.chats.length == 0;
+    Flickable {
+        y: S.top-inset;
+        height: parent.height - S.top-inset - (root.empty ? 100px : 0px);
+        VerticalLayout {
+            padding-left: S.gutter;
+            padding-right: S.gutter;
+            padding-top: S.s3;
+            padding-bottom: root.empty ? S.s6 : 110px;
+            spacing: S.s3;
+            alignment: start;
+
+            HorizontalLayout {
+                spacing: S.s3;
+                height: 56px;
+                VerticalLayout {
+                    alignment: center;
+                    Logo {
+                        width: 40px;
+                        height: 40px;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    spacing: 1px;
+                    Text {
+                        text: "Sanctum";
+                        color: S.text;
+                        font-family: S.sans;
+                        font-size: 24px;
+                        font-weight: 800;
+                    }
+                    Text {
+                        text: App.accounts.length > 1 ? App.my-name + " · " + App.my-npub-short : App.my-npub-short;
+                        color: S.muted;
+                        font-family: App.accounts.length > 1 ? S.sans : S.mono;
+                        font-size: S.t-meta;
+                        font-weight: App.accounts.length > 1 ? 600 : 400;
+                        overflow: elide;
+                    }
+                }
+                // You: your avatar (or a person icon), opens the Me page.
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 48px;
+                        height: 48px;
+                        border-radius: 24px;
+                        background: me-ta.pressed ? S.panel-hi : S.panel;
+                        border-width: 1px;
+                        border-color: S.line-hi;
+                        if !App.my-has-avatar: UserIcon {
+                            width: 24px;
+                            height: 24px;
+                        }
+                        if App.my-has-avatar: Avatar {
+                            size: 46px;
+                            picture: App.my-avatar;
+                            has-picture: true;
+                        }
+                        me-ta := TouchArea {
+                            clicked => {
+                                Actions.show-me();
+                            }
+                        }
+                    }
+                }
+            }
+
+            Panel {
+                inner-padding: 14px;
+                inner-spacing: 6px;
+                accent: App.link-up ? S.ok.with-alpha(0.45) : S.line;
+                HorizontalLayout {
+                    Pill {
+                        text: App.link-title;
+                        tone: App.link-up ? (App.link-title == "NO RELAYS" ? S.warn : App.synced ? S.ok : S.accent-text) : S.faint;
+                    }
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+                }
+                Text {
+                    text: App.link-detail;
+                    color: S.muted;
+                    font-family: S.sans;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                }
+            }
+
+            if App.toast != "": Panel {
+                inner-padding: S.s3;
+                accent: S.accent.with-alpha(0.5);
+                Body {
+                    text: App.toast;
+                    color: S.accent-text;
+                    font-size: S.t-small;
+                    font-weight: 600;
+                }
+            }
+
+            if App.storage-note != "": Panel {
+                accent: S.bad.with-alpha(0.6);
+                Body {
+                    text: App.storage-note;
+                    color: S.bad;
+                    font-size: S.t-small;
+                }
+            }
+
+            if !root.empty: HorizontalLayout {
+                padding-top: S.s1;
+                Eyebrow {
+                    text: App.unread-total > 0 ? "CHATS · " + App.unread-total + " UNREAD" : "CHATS";
+                }
+            }
+
+            if root.empty: VerticalLayout {
+                padding-top: S.s8;
+                EmptyState {
+                    icon: Images.image("chat-p");
+                    title: "No chats yet";
+                    body: "Start one with someone's npub or name@domain, or open Me to show your npub to a friend.";
+                }
+            }
+
+            for c in App.chats: ChatItem {
+                chat: c;
+                open => {
+                    Actions.open-chat(c.peer);
+                }
+            }
+        }
+    }
+
+    // Empty: the call to action is the page's bottom button.
+    if root.empty: VerticalLayout {
+        y: parent.height - 100px;
+        height: 100px;
+        padding-left: S.gutter;
+        padding-right: S.gutter;
+        padding-top: S.s3;
+        padding-bottom: 28px;
+        Btn {
+            text: "Start a chat";
+            clicked => {
+                Actions.new-chat();
+            }
+        }
+    }
+
+    // New chat
+    if !root.empty: Rectangle {
+        x: parent.width - 92px;
+        y: parent.height - 96px;
+        width: 68px;
+        height: 68px;
+        border-radius: 34px;
+        background: fab-ta.pressed ? S.fill-pressed : S.fill;
+        drop-shadow-blur: 14px;
+        drop-shadow-color: S.accent.with-alpha(0.45);
+        Image {
+            width: 30px;
+            height: 30px;
+            source: Images.image("plus-w");
+            image-fit: contain;
+        }
+        fab-ta := TouchArea {
+            clicked => {
+                Actions.new-chat();
+            }
+        }
+    }
+}

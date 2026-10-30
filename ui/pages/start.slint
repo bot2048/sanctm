@@ -1,0 +1,214 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import { S, App, Actions, Pages } from "../state.slint";
+import { Logo, Header, Body, Panel, Btn, LockIcon, Field } from "../widgets.slint";
+
+export component LoadingPage inherits Rectangle {
+    background: S.bg;
+    VerticalLayout {
+        alignment: center;
+        spacing: S.s5;
+        HorizontalLayout {
+            alignment: center;
+            Logo {
+                width: 84px;
+                height: 84px;
+            }
+        }
+        Text {
+            text: App.boot-text;
+            color: S.muted;
+            font-family: S.sans;
+            font-size: S.t-body;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+component Promise inherits HorizontalLayout {
+    in property <string> text;
+    spacing: S.s3;
+    VerticalLayout {
+        alignment: start;
+        padding-top: 1px;
+        LockIcon {
+            width: 22px;
+            height: 22px;
+        }
+    }
+    Body {
+        font-size: 15px;
+        text: root.text;
+    }
+}
+
+export component OnboardingPage inherits Rectangle {
+    background: S.bg;
+    Flickable {
+        y: S.top-inset;
+        height: parent.height - S.top-inset - 176px;
+        VerticalLayout {
+            padding-left: S.gutter;
+            padding-right: S.gutter;
+            padding-top: S.s8;
+            padding-bottom: S.s4;
+            spacing: S.s5;
+            alignment: start;
+            HorizontalLayout {
+                alignment: center;
+                Logo {
+                    width: 92px;
+                    height: 92px;
+                }
+            }
+            VerticalLayout {
+                spacing: S.s2;
+                Text {
+                    text: "SANCTUM";
+                    color: S.text;
+                    font-family: S.sans;
+                    font-size: S.t-display;
+                    font-weight: 800;
+                    letter-spacing: 8px;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "Nostr DMs, written and read on Passport.";
+                    color: S.accent-text;
+                    font-family: S.sans;
+                    font-size: S.t-body;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+            Panel {
+                inner-spacing: S.s4;
+                Promise {
+                    text: "Your Nostr key is derived from this Passport's seed and never leaves it.";
+                }
+                Promise {
+                    text: "Your phone only carries sealed, gift-wrapped envelopes (NIP-17) to relays. It never sees a word you write, or who wrote to you.";
+                }
+            }
+            if App.seed-note != "": Text {
+                text: App.seed-note;
+                color: S.warn;
+                font-family: S.sans;
+                font-size: 13px;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
+        }
+    }
+    VerticalLayout {
+        y: parent.height - 176px;
+        height: 176px;
+        padding-left: S.gutter;
+        padding-right: S.gutter;
+        padding-top: S.s3;
+        padding-bottom: 28px;
+        spacing: S.s4;
+        Btn {
+            text: "Create my Nostr identity";
+            clicked => {
+                Actions.create-identity();
+            }
+        }
+        Btn {
+            text: "I already have a Nostr account";
+            kind: 1;
+            clicked => {
+                Actions.start-import();
+            }
+        }
+    }
+}
+
+export component ImportPage inherits Rectangle {
+    background: S.bg;
+    // Height of the KeyOS keyboard while it is up (the window is not resized): the page gets
+    // that much room at the bottom, and the focused field is scrolled above the keyboard.
+    in property <length> keyboard: 0px;
+    function reveal(top: length, bottom: length) {
+        let room = flick.height - root.keyboard - S.s4;
+        if bottom + flick.viewport-y > room {
+            flick.viewport-y = max(min(0px, flick.height - flick.viewport-height), room - bottom);
+        }
+        if top + flick.viewport-y < 0px {
+            flick.viewport-y = min(0px, -top);
+        }
+    }
+    property <bool> key-focus: key-field.has-focus;
+    changed key-focus => {
+        if root.key-focus {
+            root.reveal(key-field.y, key-field.y + key-field.height);
+        }
+    }
+    changed keyboard => {
+        if root.key-focus {
+            root.reveal(key-field.y, key-field.y + key-field.height);
+        }
+    }
+    VerticalLayout {
+        padding-top: S.top-inset;
+        Header {
+            title: App.has-identity ? "Add an account" : "Use my Nostr account";
+            back => {
+                if App.has-identity {
+                    Actions.show-accounts();
+                } else {
+                    Actions.go-home();
+                }
+            }
+        }
+        flick := Flickable {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: S.gutter;
+                padding-bottom: S.gutter + root.keyboard;
+                spacing: S.s4;
+                alignment: start;
+                Panel {
+                    accent: S.warn.with-alpha(0.6);
+                    Body {
+                        font-size: 15px;
+                        color: S.warn;
+                        text: "Bring your npub, followers and DMs with you. One catch: a key you used in other apps is already exposed on those devices. A key created on Passport never was.";
+                    }
+                }
+                Btn {
+                    text: "Scan nsec QR";
+                    clicked => {
+                        Actions.scan(1);
+                    }
+                }
+                key-field := Field {
+                    label: "Or type / paste your secret key";
+                    key-label: "Import";
+                    placeholder: "nsec1… or 64 hex characters";
+                    value <=> App.import-text;
+                    mono: true;
+                    secret: true;
+                    error: App.import-error;
+                    accepted => {
+                        Actions.import-nsec(App.import-text);
+                    }
+                }
+                Btn {
+                    text: "Import and seal it";
+                    kind: App.import-text == "" ? 1 : 0;
+                    disabled: App.import-text == "";
+                    clicked => {
+                        Actions.import-nsec(App.import-text);
+                    }
+                }
+                Body {
+                    font-size: 13px;
+                    color: S.muted;
+                    text: App.has-identity ? "Sealed under a key from this Passport's seed and never shown again. It becomes another account: your other accounts and their chats stay as they are. Its chats from other NIP-17 apps arrive as the phone syncs." : "Sealed under a key from this Passport's seed and never shown again. Your chats from other NIP-17 apps arrive as the phone syncs.";
+                }
+            }
+        }
+    }
+}

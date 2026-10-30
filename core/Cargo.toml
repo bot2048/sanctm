@@ -1,0 +1,33 @@
+[package]
+name = "nip-ping-core"
+version = "0.1.0"
+edition = "2021"
+description = "Sanctum for Passport Prime: keys, NIP-01 events, NIP-19, NIP-44 v2, NIP-59 gift wrap, NIP-17 private DMs, link protocol, inbox"
+license = "GPL-3.0-or-later"
+publish = false
+
+# No KeyOS dependency: builds and tests with plain `cargo test` on any machine.
+# The crate set mirrors the Passport Prime Nostr Signer's nostr-core, which already
+# builds for armv7a-unknown-xous-elf.
+[dependencies]
+k256 = { version = "0.13", default-features = false, features = ["schnorr", "ecdh", "alloc", "std"] }
+sha2 = { version = "0.10", default-features = false, features = ["std"] }
+hmac = { version = "0.12", default-features = false, features = ["std"] }
+hkdf = { version = "0.12", default-features = false, features = ["std"] }
+chacha20 = { version = "0.9", default-features = false, features = ["std"] }
+cipher = { version = "0.4", default-features = false, features = ["std"] }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc", "zeroize"] }
+# Direct dependency only to turn on zeroize for the AES key schedule.
+aes = { version = "0.8", default-features = false, features = ["zeroize"] }
+base64 = { version = "0.22", default-features = false, features = ["alloc", "std"] }
+bech32 = { version = "0.11", default-features = false, features = ["alloc", "std"] }
+bip39 = { version = "2.0", default-features = false, features = ["alloc", "std", "zeroize"] }
+hex = { version = "0.4", default-features = false, features = ["alloc", "std"] }
+serde = { version = "1", default-features = false, features = ["derive", "alloc", "std"] }
+serde_json = { version = "1", default-features = false, features = ["alloc", "std"] }
+thiserror = "1"
+zeroize = { version = "1.7", features = ["derive"] }
+rand_core = { version = "0.6", default-features = false, features = ["std", "getrandom"] }
+getrandom = "0.2"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+[workspace]
