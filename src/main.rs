@@ -126,8 +126,6 @@ struct State {
     /// Message whose picture is on the viewer page, and the frame it shows (animations).
     viewer: Option<String>,
     viewer_frame: usize,
-    /// A device backup was asked for and has not answered yet.
-    backup_running: bool,
     new_chat: NewChat,
     /// Unsent text per chat (hex key): a draft for one person must never sit, ready to send,
     /// in someone else's composer.
@@ -508,17 +506,6 @@ fn refresh_accounts(ui: &AppWindow, st: &State) {
     app.set_accounts(ModelRc::new(VecModel::from(rows)));
     app.set_can_add_account(st.accounts.list.len() < store::MAX_ACCOUNTS);
     app.set_next_account_label(format!("Passport account {}", st.accounts.free_index() + 1).into());
-    let note = if st.backup_running {
-        "Backing up this Passport…".to_string()
-    } else if st.accounts.backup_due {
-        "Not in a Passport backup yet: Sanctm asks KeyOS again at the next start.".to_string()
-    } else if st.accounts.backup_at > 0 {
-        format!("Passport backup made {} with these accounts.", day_label(st.accounts.backup_at))
-    } else {
-        String::new()
-    };
-    app.set_backup_due(st.accounts.backup_due && !st.backup_running);
-    app.set_backup_note(note.into());
 }
 
 /// "Oct 31" (or "Oct 31 2025" in another year), for days kept without the time.
@@ -536,41 +523,6 @@ fn now_secs(st: &State) -> u64 {
     })
 }
 
-/// After an account change: ask KeyOS for a fresh encrypted device backup, off the UI thread.
-/// Until it confirms, the account list says the change is not backed up, and the next start
-/// asks again.
-fn request_backup(ui: &AppWindow, st: &mut State) {
-    if !st.accounts.backup_due {
-        st.accounts.backup_due = true;
-        if let Err(e) = st.store.save_accounts(&st.accounts) {
-            log::warn!("storage: {e}");
-        }
-    }
-    if st.backup_running {
-        return;
-    }
-    st.backup_running = true;
-    refresh_accounts(ui, st);
-    std::thread::spawn(|| {
-        let r = device::create_backup();
-        let _ = slint_keyos_platform::slint::invoke_from_event_loop(move || {
-            with_app(|ui, st| {
-                st.backup_running = false;
-                match r {
-                    Ok(()) => {
-                        st.accounts.backup_due = false;
-                        st.accounts.backup_at = now_secs(st);
-                        if let Err(e) = st.store.save_accounts(&st.accounts) {
-                            log::warn!("storage: {e}");
-                        }
-                    }
-                    Err(e) => log::warn!("device backup: {e}"),
-                }
-                refresh_accounts(ui, st);
-            })
-        });
-    });
-}
 
 fn refresh_chats(ui: &AppWindow, st: &State) {
     let app = ui.global::<App>();
@@ -1202,9 +1154,6 @@ fn start(ui: &AppWindow, st: &mut State) {
     }
     let current = st.accounts.current;
     load_account(ui, st, current, None);
-    if st.accounts.backup_due {
-        request_backup(ui, st);
-    }
 }
 
 fn reset_account_view(ui: &AppWindow, st: &mut State) {
@@ -1382,7 +1331,6 @@ fn add_account(ui: &AppWindow, st: &mut State, nsec: Option<String>) -> Result<(
         return Err(e);
     }
     load_account(ui, st, slot, Some(identity));
-    request_backup(ui, st);
     Ok(())
 }
 
@@ -1492,8 +1440,8 @@ fn remove_account(ui: &AppWindow, st: &mut State, slot: u32) {
     KEY_TIMER.with(|t| t.stop());
     app.set_remove_nsec(SharedString::new());
     app.set_remove_nsec_chunked(SharedString::new());
+    refresh_accounts(ui, st);
     app.set_page(PAGE_ACCOUNTS);
-    request_backup(ui, st);
     match problem {
         Some(e) => {
             log::error!("storage: {e}");
@@ -2252,7 +2200,6 @@ fn boot(ui: &AppWindow, fs: std::sync::Arc<FileSystem>) {
         reply_to: None,
         viewer: None,
         viewer_frame: 0,
-        backup_running: false,
         new_chat: NewChat::default(),
         drafts: HashMap::new(),
         draft_peer: None,

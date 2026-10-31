@@ -820,9 +820,9 @@ export component AccountsPage inherits Rectangle {
                     font-size: 13px;
                     wrap: word-wrap;
                 }
-                if App.backup-note != "": Text {
-                    text: App.backup-note;
-                    color: App.backup-due ? S.warn : S.muted;
+                Text {
+                    text: "Passport keys come back with your seed words. Imported keys are kept in the encrypted backups KeyOS makes of this Passport: seed words alone do not restore them.";
+                    color: S.muted;
                     font-family: S.sans;
                     font-size: 13px;
                     wrap: word-wrap;

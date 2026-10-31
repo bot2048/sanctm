@@ -108,12 +108,6 @@ pub struct Accounts {
     /// NIP-06 indexes of removed derived accounts: a new Passport key never reuses them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub retired: Vec<u32>,
-    /// When KeyOS last confirmed a device backup asked for after an account change (0: never),
-    /// and whether a change since then is not in a backup yet (asked again at the next start).
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub backup_at: u64,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub backup_due: bool,
 }
 
 impl Accounts {

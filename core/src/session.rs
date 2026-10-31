@@ -214,10 +214,9 @@ pub struct Session {
     pub link_up: bool,
     pub synced: bool,
     pub companion: String,
-    /// The companion's relays: what a published kind 10050 would list.
+    /// The user's relays, as the companion lists them in its hello.
     pub relays: Vec<String>,
-    /// The relays the user confirmed by publishing them as DM relays (persisted by the app).
-    /// Once there are some, AUTH is signed for these only: the phone names `relays` itself.
+    /// Our published DM relay list (kind 10050), as last published (persisted by the app).
     pub auth_relays: Vec<String>,
     pub relays_up: u32,
     pub relays_total: u32,
@@ -817,13 +816,14 @@ impl Session {
         fx
     }
 
-    /// NIP-42 AUTH, signed only for the relays the companion listed as ours in its hello
-    /// (signing for a recipient's inbox relay would tell it who sent the gift wrap), only for
-    /// nonce-like challenges, and at most `AUTH_BURST` times per relay per minute. The
-    /// companion is untrusted; this keeps it from using the Passport as a login signer.
+    /// NIP-42 AUTH, signed only for the user's relays as the companion listed them in its
+    /// hello (signing for a recipient's inbox relay would tell it who sent the gift wrap), only
+    /// for nonce-like challenges, at most `AUTH_BURST` times per relay and `AUTH_TOTAL` in all
+    /// per minute. The companion is untrusted; this keeps it from using the Passport as a login
+    /// signer. Not limited to the published list: that is published only after a sync, which a
+    /// list of AUTH-only inbox relays could never finish.
     fn answer_auth(&mut self, relay: &str, challenge: &str) -> Option<Event> {
-        let ours = if self.auth_relays.is_empty() { &self.relays } else { &self.auth_relays };
-        if !ours.iter().any(|r| r == relay) || !nip17::valid_challenge(challenge) {
+        if !self.relays.iter().any(|r| r == relay) || !nip17::valid_challenge(challenge) {
             return None;
         }
         self.auth_log.retain(|(_, t)| t.elapsed() < AUTH_WINDOW);
@@ -1291,6 +1291,21 @@ mod tests {
         let pics = bob.handle_frame(&blob(fetch[0]["id"].as_str().unwrap(), 0, 0, &gif)).pictures;
         assert_eq!(pics[0].frames.len(), 3);
         assert_eq!((pics[0].ext, pics[0].file.len()), ("gif", gif.len()));
+    }
+
+    #[test]
+    fn a_list_of_auth_only_relays_syncs_and_gets_published() {
+        // An old published list (other relays) must not keep the new ones from logging in:
+        // AUTH first, then the sync, then the list is published.
+        let mut s = session();
+        s.auth_relays = vec!["wss://old.example".into()];
+        s.link_changed(true);
+        hello(&mut s, &["wss://inbox.example"]);
+        open(&mut s, &["wss://inbox.example"]);
+        let fx = s.handle_frame(r#"{"t":"auth","relay":"wss://inbox.example","challenge":"c1"}"#);
+        assert_eq!(frames_of(&fx, "auth").len(), 1);
+        let pubs = frames_of(&eose(&mut s), "publish");
+        assert_eq!(pubs[0]["ev"]["tags"][0][1], "wss://inbox.example");
     }
 
     #[test]

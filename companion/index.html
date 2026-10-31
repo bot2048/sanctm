@@ -197,7 +197,15 @@
     return { ok, bad };
   }
   const hash = new URLSearchParams(location.hash.slice(1));
-  const savedRelays = store.get("relays", DEFAULT_RELAYS);
+  // A list is saved only when the user changed it; one equal to an earlier default list (saved
+  // by "Save" before) counts as no change, so every default update reaches them.
+  const OLD_DEFAULTS = [DEFAULT_RELAYS.slice(0, 11)];
+  const sameSet = (a, b) => a.length === b.length && a.every((u) => b.includes(u));
+  let savedRelays = store.get("relays", null);
+  if (!Array.isArray(savedRelays) || OLD_DEFAULTS.concat([DEFAULT_RELAYS]).some((d) => sameSet(savedRelays, d))) {
+    savedRelays = DEFAULT_RELAYS;
+    try { localStorage.removeItem("ndms.relays"); } catch (_) {}
+  }
   let linkUrl = hash.get("ws") ? normLink(hash.get("ws")) : normLink(store.get("link", DEFAULT_LINK));
   let relayUrls = parseRelays(hash.get("relays") ? hash.get("relays").split(",")
     : Array.isArray(savedRelays) ? savedRelays.filter((u) => typeof u === "string") : DEFAULT_RELAYS).ok;
@@ -284,9 +292,11 @@
     }
     if (!relays.size) box.textContent = "No relays configured.";
     const pool = [...relays.entries()].filter(([, r]) => !r.temp);
-    const open = pool.filter(([, r]) => r.state === "open").map(([u]) => u);
-    // The Passport publishes the default relays that are open as our DM relays (kind 10050).
-    tellPassport({ t: "relays", up: open.length, total: pool.length, open });
+    const up = pool.filter(([, r]) => r.state === "open").length;
+    // The Passport publishes our relays that are not down as our DM relays (kind 10050): open
+    // ones, and ones still connecting (a slow relay is not left out of the list).
+    const open = pool.filter(([, r]) => r.state !== "closed").map(([u]) => u);
+    tellPassport({ t: "relays", up, total: pool.length, open });
   }
 
   function openRelay(url, temp = false) {
@@ -924,7 +934,9 @@
     const { ok, bad } = parseRelays($("relaysEdit").value.split(/[\n,]+/));
     const newLink = normLink($("linkUrl").value);
     relayUrls = ok;
-    store.set("relays", relayUrls); store.set("link", newLink);
+    if (sameSet(relayUrls, DEFAULT_RELAYS)) { try { localStorage.removeItem("ndms.relays"); } catch (_) {} }
+    else store.set("relays", relayUrls);
+    store.set("link", newLink);
     $("relaysEdit").value = relayUrls.join("\n"); $("linkUrl").value = newLink;
     settingsMsg(bad.length ? `Saved. Ignored (not a ws:// or wss:// relay URL): ${bad.join(", ")}` : "Saved.", bad.length);
     // A #ws= / #relays= override would beat the saved settings on the next load.

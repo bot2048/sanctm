@@ -420,18 +420,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "backup"
-version = "1.0.0"
-dependencies = [
- "crypto",
- "fs",
- "rkyv",
- "security",
- "server",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3932,7 +3920,6 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 name = "nip-ping"
 version = "0.1.0"
 dependencies = [
- "backup",
  "foundation-themes",
  "futures-util",
  "getrandom 0.2.10",
