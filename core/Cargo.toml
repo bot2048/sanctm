@@ -29,5 +29,7 @@ thiserror = "1"
 zeroize = { version = "1.7", features = ["derive"] }
 rand_core = { version = "0.6", default-features = false, features = ["std", "getrandom"] }
 getrandom = "0.2"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+# Video on the Passport: a pure-Rust H.264 decoder (no C, no_std + alloc).
+z264 = "0.1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
 [workspace]

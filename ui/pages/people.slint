@@ -2,7 +2,7 @@
 
 import { Images } from "@ui/theme.slint";
 import { S, App, Actions, Pages, Confirm, ContactRow, AccountRow } from "../state.slint";
-import { Header, Eyebrow, Body, Mono, Panel, Pill, Badge, Btn, Chip, QrBox, Avatar, Section, Field, Toggle, VerifiedIcon, BoltIcon, ChevronIcon, IconBtn } from "../widgets.slint";
+import { Header, Eyebrow, Body, Mono, Panel, Pill, Badge, Btn, HoldButton, Chip, QrBox, Avatar, Section, Field, Toggle, VerifiedIcon, BoltIcon, ChevronIcon, IconBtn } from "../widgets.slint";
 
 // One contact in the grouped list (as the chats list: shared card, hairlines between rows).
 component ContactItem inherits Rectangle {
@@ -463,7 +463,7 @@ export component ContactPage inherits Rectangle {
                         kind: 2;
                         clicked => {
                             Confirm.title = "Delete this chat?";
-                            Confirm.body = "Every message with them is deleted on this Passport. Copies on relays stay sealed; this Passport can fetch them again.";
+                            Confirm.body = "Every message with them is deleted from this Passport for good. Copies still on relays stay deleted when they arrive again.";
                             Confirm.confirm-label = "Delete chat";
                             Confirm.critical = true;
                             Confirm.action = "delete-chat";
@@ -581,7 +581,7 @@ export component MePage inherits Rectangle {
                     Body {
                         font-size: 13px;
                         color: S.muted;
-                        text: App.imported ? "Imported nsec, sealed under this Passport's seed. It never leaves the device." : "Derived from this Passport's seed (NIP-06 over the app seed). Restore the Passport and the same npub comes back. The key never leaves the device.";
+                        text: App.imported ? "Imported nsec, sealed on this Passport and kept in its backup (seed words alone do not restore it). It never leaves the device." : "Made from this Passport's seed words: restore the Passport and the same npub comes back. Other Nostr apps cannot recreate it from your words. The key never leaves the device.";
                     }
                 }
                 Section {
@@ -635,34 +635,39 @@ export component MePage inherits Rectangle {
                         color: S.muted;
                         text: App.sim ? "In the simulator a local WebSocket stands in for QuantumLink. Either way the phone only carries signed gift wraps: no plaintext, no keys, no contact names." : "Third-party apps get a QuantumLink data channel with QLv2 in KeyOS 1.5. Until then messages are written, sealed and queued here, and go out when the link opens.";
                     }
+                    Btn {
+                        text: "Fetch all messages again";
+                        kind: 1;
+                        button-height: S.btn-h-sm;
+                        disabled: !App.link-up;
+                        clicked => {
+                            Actions.fetch-history();
+                        }
+                    }
+                    Body {
+                        font-size: 13px;
+                        color: S.muted;
+                        text: "Asks the relays for every message from the start, to fill gaps, including those you wrote in other Nostr apps with this key. What you deleted here stays deleted.";
+                    }
                 }
                 Section {
                     title: "DM inbox relays";
-                    if App.relays.length == 0: Body {
+                    Body {
                         font-size: S.t-small;
                         color: S.muted;
-                        text: "Link a phone to see its relays.";
+                        text: App.dm-relays.length > 0 ? "Published " + App.dm-relays-when + ". Other Nostr apps deliver your DMs to these relays, and Sanctm sends to them too." : App.link-up ? "Published after the first sync: every relay on your list that is up." : "Published by itself once a phone is linked: every relay on your list that is up.";
                     }
-                    for r in App.relays: Text {
+                    for r in App.dm-relays: Text {
                         text: r;
                         color: S.text;
                         font-family: S.mono;
                         font-size: S.t-small;
                         overflow: elide;
                     }
-                    Btn {
-                        text: "Publish as my DM relays";
-                        kind: 1;
-                        button-height: S.btn-h-sm;
-                        disabled: !App.link-up || App.relays.length == 0;
-                        clicked => {
-                            Actions.publish-relays();
-                        }
-                    }
                     Body {
                         font-size: 13px;
-                        color: App.relay-note == "" ? S.muted : App.relay-note-error ? S.bad : S.ok;
-                        text: App.relay-note != "" ? App.relay-note : "Signs a kind 10050 list on this Passport so other Nostr apps deliver your DMs to these relays.";
+                        color: S.muted;
+                        text: "To change them, edit the relay list on your phone's Sanctm page (Settings). It starts with 14 well-known relays; the Passport publishes the ones that are up by itself.";
                     }
                 }
                 Section {
@@ -685,7 +690,7 @@ component AccountItem inherits Rectangle {
     in property <AccountRow> acct;
     callback open();
     callback remove();
-    height: 72px;
+    height: 84px;
     background: ta.pressed ? S.panel : transparent;
     border-radius: S.r-lg;
     Rectangle {
@@ -753,6 +758,13 @@ component AccountItem inherits Rectangle {
                 horizontal-stretch: 1;
             }
         }
+        Text {
+            text: root.acct.place;
+            color: S.faint;
+            font-family: S.sans;
+            font-size: 12px;
+            overflow: elide;
+        }
     }
     if root.acct.current: Pill {
         x: parent.width - self.preferred-width;
@@ -798,17 +810,19 @@ export component AccountsPage inherits Rectangle {
                         Actions.switch-account(a.slot);
                     }
                     remove => {
-                        Confirm.slot = a.slot;
-                        Confirm.title = a.imported ? "Forget " + a.name + "?" : "Remove " + a.name + "?";
-                        Confirm.body = a.imported ? "Its secret key is erased from this Passport and cannot be recovered from it. Keep your nsec somewhere else if you want this account back. Its chats stay sealed here." : "It can be created again from this Passport's seed: Create a new Passport key brings the same npub and its chats back.";
-                        Confirm.confirm-label = a.imported ? "Forget the key" : "Remove account";
-                        Confirm.critical = a.imported;
-                        Confirm.action = "remove-account";
+                        Actions.start-remove(a.slot);
                     }
                 }
                 Text {
                     text: "Tap an account to switch to it. Each one has its own npub, contacts and chats; a linked phone follows the switch.";
                     color: S.faint;
+                    font-family: S.sans;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                }
+                if App.backup-note != "": Text {
+                    text: App.backup-note;
+                    color: App.backup-due ? S.warn : S.muted;
                     font-family: S.sans;
                     font-size: 13px;
                     wrap: word-wrap;
@@ -823,7 +837,7 @@ export component AccountsPage inherits Rectangle {
                         }
                     }
                     if App.can-add-account: Text {
-                        text: App.next-account-label + ": derived from this Passport's seed (NIP-06), so restoring the Passport brings it back.";
+                        text: App.next-account-label + ": made from this Passport's seed words, so restoring the Passport brings it back.";
                         color: S.muted;
                         font-family: S.sans;
                         font-size: 13px;
@@ -843,6 +857,95 @@ export component AccountsPage inherits Rectangle {
                         font-family: S.sans;
                         font-size: 13px;
                         wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Removing an account: what is erased and what still exists, the key to keep first, then a
+// 3-second hold.
+export component RemoveAccountPage inherits Rectangle {
+    background: S.bg;
+    VerticalLayout {
+        padding-top: S.top-inset;
+        Header {
+            title: "Remove account";
+            subtitle: App.remove-name;
+            subtitle-mono: false;
+            back => {
+                Actions.show-accounts();
+            }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: S.gutter;
+                spacing: S.s5;
+                alignment: start;
+                Panel {
+                    accent: S.bad;
+                    Body {
+                        color: S.bad;
+                        font-weight: 600;
+                        text: "Erased from this Passport: its key, chats, contacts, profiles and kept pictures.";
+                    }
+                    Body {
+                        font-size: S.t-small;
+                        text: "Still exists: Passport backups made before today, sealed copies on relays (unreadable without the key), messages on your contacts' devices, and any copy of the key you kept.";
+                    }
+                    Body {
+                        font-size: S.t-small;
+                        text: App.remove-imported ? "Added again later, this account starts empty." : "Your seed words can still recreate this key, but Sanctm will not make it again. Added again later, it starts empty.";
+                    }
+                }
+                Section {
+                    title: "Keep your key first";
+                    Body {
+                        font-size: S.t-small;
+                        text: "Write it on paper, or scan it into a password manager you trust. Anyone who has it can read your messages and write as you. To use it again: Me, Accounts, Use an existing nsec.";
+                    }
+                    if App.remove-nsec == "": Btn {
+                        text: "Show key first";
+                        kind: 1;
+                        clicked => {
+                            Actions.show-remove-key();
+                        }
+                    }
+                    if App.remove-nsec != "": HorizontalLayout {
+                        alignment: center;
+                        QrBox {
+                            size: 280px;
+                            code: App.remove-nsec;
+                        }
+                    }
+                    if App.remove-nsec != "": Mono {
+                        text: App.remove-nsec-chunked;
+                    }
+                    if App.remove-nsec != "": Body {
+                        font-size: 13px;
+                        color: S.muted;
+                        text: "Hides in 30 seconds. Only on this screen: it never goes to your phone.";
+                    }
+                    if App.remove-shown != "": Body {
+                        font-size: 13px;
+                        color: S.muted;
+                        text: App.remove-shown;
+                    }
+                }
+                Section {
+                    title: "Remove it";
+                    HoldButton {
+                        text: "Hold to remove";
+                        done => {
+                            Actions.remove-account(App.remove-slot);
+                        }
+                    }
+                    Body {
+                        font-size: 13px;
+                        color: S.muted;
+                        text: "Press and hold for 3 seconds. Letting go early keeps the account.";
                     }
                 }
             }

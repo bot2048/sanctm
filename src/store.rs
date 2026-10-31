@@ -17,6 +17,9 @@
 //!   identity's contacts, chats, Nostr profiles and kept-picture list (tag: a keyed hash of
 //!   the public key, see `vault::file_tag`).
 //! * `pic-<tag>.bin`: one kept picture.
+//!
+//! Removing an account deletes its identity's files; `accounts.json` remembers when, so the
+//! account added again starts empty (see `Accounts::wiped`).
 
 use std::sync::Arc;
 
@@ -50,6 +53,9 @@ pub struct Profile {
     /// Relays the user published as DM relays (kind 10050): the only ones AUTH is signed for.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dm_relays: Vec<String>,
+    /// When that list was published (0: never).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub dm_relays_at: u64,
     /// The slot was removed (its key forgotten). Never loaded again.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub removed: bool,
@@ -81,7 +87,12 @@ pub struct Account {
     /// The account's own Nostr profile (name, photo), cached for the account list.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub me: Option<NostrProfile>,
+    /// When its key was last shown on screen (start of that UTC day; 0: never).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub shown_at: u64,
 }
+
+fn is_zero(n: &u64) -> bool { *n == 0 }
 
 /// The accounts on this Passport.
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -89,6 +100,20 @@ pub struct Accounts {
     /// Slot in use.
     pub current: u32,
     pub list: Vec<Account>,
+    /// Removed accounts, and when: added again, such an account shows nothing older, even when
+    /// relays still have it. Not the key: a one-way tag keyed by the app seed (`wipe_tag`),
+    /// which neither gives the key back nor tells which account it was.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wiped: Vec<(String, u64)>,
+    /// NIP-06 indexes of removed derived accounts: a new Passport key never reuses them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retired: Vec<u32>,
+    /// When KeyOS last confirmed a device backup asked for after an account change (0: never),
+    /// and whether a change since then is not in a backup yet (asked again at the next start).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub backup_at: u64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub backup_due: bool,
 }
 
 impl Accounts {
@@ -96,8 +121,13 @@ impl Accounts {
 
     pub fn get_mut(&mut self, slot: u32) -> Option<&mut Account> { self.list.iter_mut().find(|a| a.slot == slot) }
 
-    /// Lowest NIP-06 index no derived account uses.
-    pub fn free_index(&self) -> u32 { (0..).find(|i| !self.list.iter().any(|a| !a.imported && a.index == *i)).unwrap_or(0) }
+    /// Lowest NIP-06 index no derived account uses and none removed did.
+    pub fn free_index(&self) -> u32 {
+        (0..).find(|i| !self.retired.contains(i) && !self.list.iter().any(|a| !a.imported && a.index == *i)).unwrap_or(0)
+    }
+
+    /// When the account with this tag (`wipe_tag`) was last removed (0: never).
+    pub fn wiped_at(&self, tag: &str) -> u64 { self.wiped.iter().filter(|(k, _)| k == tag).map(|(_, t)| *t).max().unwrap_or(0) }
 }
 
 /// A picture kept on this Passport, by message.
@@ -118,6 +148,9 @@ const PIC_MAGIC: &[u8; 4] = b"NPIC";
 
 impl Store {
     pub fn new(fs: Arc<FileSystem>, seed: [u8; 32]) -> Self { Self { fs, seed } }
+
+    /// What `Accounts::wiped` remembers of a removed account: a keyed hash of its public key.
+    pub fn wipe_tag(&self, pk_hex: &str) -> String { nip_ping_core::vault::file_tag(&self.seed, &format!("removed:{pk_hex}")) }
 
     fn read(&self, name: &str) -> Result<Option<Vec<u8>>, String> {
         match self.fs.durable_file_read(name, Location::AppData) {
@@ -243,4 +276,26 @@ impl Store {
     }
 
     pub fn remove_picture(&self, id: &str, msg: &str) -> Result<(), String> { self.remove(&self.picture_file(id, msg)) }
+
+    /// Delete everything one identity has here: chats, contacts, profiles, kept pictures. Every
+    /// file is tried; the first failure is reported.
+    pub fn forget_identity(&self, id: &str) -> Result<(), String> {
+        let mut first = Ok(());
+        let mut note = |r: Result<(), String>| {
+            if let Err(e) = r {
+                log::warn!("storage: {e}");
+                if first.is_ok() {
+                    first = Err(e);
+                }
+            }
+        };
+        match self.load_kept(id) {
+            Ok(kept) => kept.iter().for_each(|k| note(self.remove_picture(id, &k.msg))),
+            Err(e) => note(Err(e)),
+        }
+        for name in ["kept", "inbox", "contacts", "people"] {
+            note(self.remove(&format!("{name}-{id}.json")));
+        }
+        first
+    }
 }

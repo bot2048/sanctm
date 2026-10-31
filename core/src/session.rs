@@ -31,8 +31,13 @@ const MAX_FUTURE_SKEW: u64 = 600;
 /// NIP-42: at most this many AUTH signatures per relay within `AUTH_WINDOW` seconds.
 /// Measured on the monotonic clock: the wall clock can be set by the companion.
 const AUTH_BURST: usize = 2;
-const AUTH_TOTAL: usize = 8;
+const AUTH_TOTAL: usize = 16;
 const AUTH_WINDOW: Duration = Duration::from_secs(60);
+/// Most relays taken from the companion's hello (the user's list: 14 by default).
+const MAX_POOL: usize = 16;
+/// The DM relay list published without asking follows relays going up and down at most this
+/// often (a relay the user takes off the list goes at once).
+const DM_RELAYS_REFRESH: u64 = 3600;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Contact {
@@ -107,6 +112,14 @@ pub struct Effects {
     pub nip05: Option<(String, std::result::Result<PublicKey, String>)>,
     /// Pictures that finished loading (not stored unless kept).
     pub pictures: Vec<Picture>,
+    /// Video files that arrived, to decode away from the UI thread (`video::decode_video`).
+    pub videos: Vec<Media>,
+}
+
+/// A video file of a message, as sent (opened if it was encrypted).
+pub struct Media {
+    pub msg: String,
+    pub file: Vec<u8>,
 }
 
 /// A picture in a message, as RGBA pixels ready to show.
@@ -116,8 +129,41 @@ pub struct Picture {
     pub w: u32,
     pub h: u32,
     pub rgba: Vec<u8>,
+    /// Every frame of an animated picture (GIF, WebP) or a video, the first one being `rgba`.
+    pub frames: Vec<crate::media::Frame>,
+    /// An animation's own file and its extension ("gif", "webp", "mp4"), so a copy saved to
+    /// Files keeps moving; empty for a still picture.
+    pub file: Vec<u8>,
+    pub ext: &'static str,
     /// Why it did not load (then `rgba` is empty).
     pub error: Option<String>,
+}
+
+impl Picture {
+    fn failed(msg: String, why: String) -> Self { Self { msg, w: 0, h: 0, rgba: Vec::new(), frames: Vec::new(), file: Vec::new(), ext: "", error: Some(why) } }
+
+    /// A decoded picture or video; keeps `file` only if it moves.
+    pub fn shown(msg: String, r: Result<crate::media::Rgba>, file: Vec<u8>, ext: &'static str) -> Self {
+        match r {
+            Ok(img) => {
+                let file = if img.frames.is_empty() { Vec::new() } else { file };
+                Picture { msg, w: img.w, h: img.h, rgba: img.rgba, frames: img.frames, file, ext, error: None }
+            }
+            // media.rs reasons are written for the screen; drop the "link frame: " prefix.
+            Err(Error::Frame(why)) => Picture::failed(msg, why.to_string()),
+            Err(e) => Picture::failed(msg, e.to_string()),
+        }
+    }
+}
+
+/// Extension of a picture file, from its first bytes.
+fn picture_ext(file: &[u8]) -> &'static str {
+    match image::guess_format(file) {
+        Ok(image::ImageFormat::Gif) => "gif",
+        Ok(image::ImageFormat::WebP) => "webp",
+        Ok(image::ImageFormat::Png) => "png",
+        _ => "jpg",
+    }
 }
 
 /// Biggest picture the phone may send, in pixels: about the width of a chat bubble.
@@ -125,11 +171,15 @@ pub const PICTURE_W: u32 = 360;
 pub const PICTURE_H: u32 = 480;
 /// Biggest encrypted file the Passport fetches (bytes).
 pub const MAX_FILE_BYTES: usize = 8 * 1024 * 1024;
+/// Biggest video the Passport fetches to play (bytes).
+pub const MAX_VIDEO_BYTES: usize = 24 * 1024 * 1024;
 
 enum FetchFor {
     Avatar { pk: PublicKey },
     Picture { msg: String },
     File { msg: String },
+    /// A video link in a message: the file as served.
+    Video { msg: String },
 }
 
 struct Fetch {
@@ -153,6 +203,7 @@ impl Effects {
             self.nip05 = o.nip05;
         }
         self.pictures.extend(o.pictures);
+        self.videos.extend(o.videos);
     }
 }
 
@@ -170,6 +221,13 @@ pub struct Session {
     pub auth_relays: Vec<String>,
     pub relays_up: u32,
     pub relays_total: u32,
+    /// Pool relays the companion has connected now.
+    pub relays_open: Vec<String>,
+    /// When our DM relay list (kind 10050) was last published (persisted by the app).
+    pub dm_relays_at: u64,
+    /// The account was removed before, at this time: anything older stays deleted, even when
+    /// relays still have it (persisted by the app, outside the account's own files).
+    pub wiped_at: u64,
     clock_offset: i64,
     fixed_now: Option<u64>,
     /// (relay, when) of recent AUTH signatures, for the rate limit.
@@ -227,6 +285,9 @@ impl Session {
             auth_relays: Vec::new(),
             relays_up: 0,
             relays_total: 0,
+            relays_open: Vec::new(),
+            dm_relays_at: 0,
+            wiped_at: 0,
             clock_offset: 0,
             fixed_now: None,
             auth_log: Vec::new(),
@@ -254,13 +315,27 @@ impl Session {
         system_now().saturating_add_signed(self.clock_offset)
     }
 
-    /// Subscription start: back to the last sync, minus the NIP-59 timestamp jitter.
+    /// Subscription start: back to the last sync, minus the NIP-59 timestamp jitter. With no
+    /// sync yet, everything (from when the account was last removed, if it was).
     pub fn since(&self) -> u64 {
-        if self.inbox.last_sync == 0 {
+        let from = if self.inbox.last_sync == 0 { self.wiped_at } else { self.inbox.last_sync };
+        if from == 0 {
             0
         } else {
-            self.inbox.last_sync.saturating_sub(TIME_JITTER + 3600)
+            from.saturating_sub(TIME_JITTER + 3600)
         }
+    }
+
+    /// Ask the phone for every message again, from the beginning (or from when the account was
+    /// last removed): fills gaps, e.g. after relays that were down come back.
+    pub fn fetch_all_history(&mut self) -> Effects {
+        self.inbox.last_sync = 0;
+        self.synced = false;
+        let mut fx = Effects { changed: true, status: true, ..Effects::default() };
+        if self.link_up {
+            fx.frames.push(link::hello(&self.me.pk, self.since()));
+        }
+        fx
     }
 
     pub fn contact(&self, pk: &PublicKey) -> Option<&Contact> { self.contacts.iter().find(|c| c.pk == *pk) }
@@ -348,7 +423,7 @@ impl Session {
         match frame {
             Inbound::Hello { client, now, relays, .. } => {
                 self.companion = clean_line(&client, 40);
-                self.relays = relays.into_iter().filter(|r| nip17::valid_relay(r)).take(12).collect();
+                self.relays = relays.into_iter().filter(|r| nip17::valid_relay(r)).take(MAX_POOL).collect();
                 if let Some(now) = now.filter(|n| (SANE_CLOCK..MAX_CLOCK).contains(n)) {
                     let sys = system_now();
                     if sys < SANE_CLOCK {
@@ -371,6 +446,7 @@ impl Session {
                 let auto = self.auto_profile_keys();
                 fx.merge(self.ask_profiles(&auto));
                 fx.merge(self.fetch_missing_avatars());
+                fx.merge(self.auto_dm_relays());
             }
             Inbound::Ok { id, accepted, failed } => fx.merge(self.handle_ok(&id, accepted.len() as u32, failed)),
             Inbound::Auth { relay, challenge } => {
@@ -378,9 +454,10 @@ impl Session {
                     fx.frames.push(link::auth(&ev));
                 }
             }
-            Inbound::Relays { up, total } => {
+            Inbound::Relays { up, total, open } => {
                 self.relays_up = up;
                 self.relays_total = total;
+                self.relays_open = open.into_iter().filter(|r| nip17::valid_relay(r)).take(MAX_POOL).collect();
                 fx.status = true;
             }
             Inbound::Ping {} => fx.frames.push(link::pong()),
@@ -432,6 +509,9 @@ impl Session {
         let me = self.me.pk;
         let out = dm.sender == me;
         let now = self.now();
+        if self.wiped_at > 0 && dm.created_at <= self.wiped_at {
+            return fx; // from before the account was removed: deleted for good
+        }
         if dm.expires.is_some_and(|e| now >= SANE_CLOCK && e <= now) {
             return fx; // already expired (NIP-40): never shown
         }
@@ -590,7 +670,8 @@ impl Session {
             return Err(Error::Frame("loading a picture needs the phone linked"));
         }
         let id = format!("pic:{msg}");
-        let max = (PICTURE_W * PICTURE_H * 4) as usize;
+        // RGBA up to PICTURE_W x PICTURE_H, or an animated picture's own file (decoded here).
+        let max = MAX_FILE_BYTES;
         self.fetches.insert(id.clone(), Fetch { what: FetchFor::Picture { msg: msg.into() }, url: url.clone(), buf: Vec::new(), next: 0, max, w: 0, h: 0 });
         Ok(Effects { frames: vec![link::fetch(&id, &url, "picture", PICTURE_W, PICTURE_H, max)], ..Effects::default() })
     }
@@ -606,12 +687,27 @@ impl Session {
         if url.is_empty() {
             return Err(Error::Frame("the file link is not https"));
         }
-        if f.size.is_some_and(|s| s > MAX_FILE_BYTES as u64) {
+        let max = if f.label() == "Video" { MAX_VIDEO_BYTES } else { MAX_FILE_BYTES };
+        if f.size.is_some_and(|s| s > max as u64) {
             return Err(Error::Frame("too big to open on Passport"));
         }
         let id = format!("file:{msg}");
-        self.fetches.insert(id.clone(), Fetch { what: FetchFor::File { msg: msg.into() }, url: url.clone(), buf: Vec::new(), next: 0, max: MAX_FILE_BYTES, w: 0, h: 0 });
-        Ok(Effects { frames: vec![link::fetch(&id, &url, "file", 0, 0, MAX_FILE_BYTES)], ..Effects::default() })
+        self.fetches.insert(id.clone(), Fetch { what: FetchFor::File { msg: msg.into() }, url: url.clone(), buf: Vec::new(), next: 0, max, w: 0, h: 0 });
+        Ok(Effects { frames: vec![link::fetch(&id, &url, "file", 0, 0, max)], ..Effects::default() })
+    }
+
+    /// Fetch the video at `url` in message `msg` (a link in its text), to play it here.
+    pub fn load_video(&mut self, msg: &str, url: &str) -> Result<Effects> {
+        let url = profile::https_url(url);
+        if url.is_empty() {
+            return Err(Error::Frame("not a video link"));
+        }
+        if !self.link_up {
+            return Err(Error::Frame("loading a video needs the phone linked"));
+        }
+        let id = format!("vid:{msg}");
+        self.fetches.insert(id.clone(), Fetch { what: FetchFor::Video { msg: msg.into() }, url: url.clone(), buf: Vec::new(), next: 0, max: MAX_VIDEO_BYTES, w: 0, h: 0 });
+        Ok(Effects { frames: vec![link::fetch(&id, &url, "file", 0, 0, MAX_VIDEO_BYTES)], ..Effects::default() })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -619,8 +715,8 @@ impl Session {
         let mut fx = Effects::default();
         let Some(f) = self.fetches.get_mut(id) else { return fx };
         let fail = |what: &FetchFor, why: String, fx: &mut Effects| {
-            if let FetchFor::Picture { msg } | FetchFor::File { msg } = what {
-                fx.pictures.push(Picture { msg: msg.clone(), w: 0, h: 0, rgba: Vec::new(), error: Some(why) });
+            if let FetchFor::Picture { msg } | FetchFor::File { msg } | FetchFor::Video { msg } = what {
+                fx.pictures.push(Picture::failed(msg.clone(), why));
             }
         };
         if let Some(e) = error {
@@ -656,21 +752,68 @@ impl Session {
             FetchFor::Picture { msg } => {
                 let ok = f.w > 0 && f.h > 0 && f.w <= PICTURE_W && f.h <= PICTURE_H && f.buf.len() == (f.w * f.h * 4) as usize;
                 if ok {
-                    fx.pictures.push(Picture { msg, w: f.w, h: f.h, rgba: f.buf, error: None });
+                    fx.pictures.push(Picture { msg, w: f.w, h: f.h, rgba: f.buf, frames: Vec::new(), file: Vec::new(), ext: "", error: None });
+                } else if f.w == 0 && f.h == 0 && !f.buf.is_empty() {
+                    // An animated picture: the phone sends the file, its frames are decoded here.
+                    let ext = picture_ext(&f.buf);
+                    fx.pictures.push(Picture::shown(msg, crate::media::decode_picture(&f.buf), f.buf, ext));
                 } else {
-                    fx.pictures.push(Picture { msg, w: 0, h: 0, rgba: Vec::new(), error: Some("not a picture".into()) });
+                    fx.pictures.push(Picture::failed(msg, "not a picture".into()));
                 }
             }
             FetchFor::File { msg } => {
-                let r = self.inbox.find_message(&msg).and_then(|m| m.file.clone()).ok_or(Error::Frame("message gone")).and_then(|meta| crate::media::open_file(&meta, &f.buf));
-                match r {
-                    Ok(img) => fx.pictures.push(Picture { msg, w: img.w, h: img.h, rgba: img.rgba, error: None }),
-                    // media.rs reasons are written for the screen; drop the "link frame: " prefix.
-                    Err(Error::Frame(why)) => fx.pictures.push(Picture { msg, w: 0, h: 0, rgba: Vec::new(), error: Some(why.to_string()) }),
-                    Err(e) => fx.pictures.push(Picture { msg, w: 0, h: 0, rgba: Vec::new(), error: Some(e.to_string()) }),
+                let meta = self.inbox.find_message(&msg).and_then(|m| m.file.clone());
+                match meta {
+                    Some(meta) if meta.label() == "Video" => match crate::media::decrypt_file(&meta, &f.buf) {
+                        Ok(file) => fx.videos.push(Media { msg, file }),
+                        Err(e) => fx.pictures.push(Picture::shown(msg, Err(e), Vec::new(), "")),
+                    },
+                    Some(meta) => match crate::media::decrypt_file(&meta, &f.buf) {
+                        Err(e) => fx.pictures.push(Picture::shown(msg, Err(e), Vec::new(), "")),
+                        Ok(plain) => {
+                            let r = if !meta.is_image() && !meta.mime.is_empty() && !meta.mime.starts_with("application/octet") {
+                                Err(Error::Frame("open this file on a phone app"))
+                            } else {
+                                crate::media::decode_picture(&plain)
+                            };
+                            let ext = picture_ext(&plain);
+                            fx.pictures.push(Picture::shown(msg, r, plain, ext));
+                        }
+                    },
+                    None => fx.pictures.push(Picture::failed(msg, "message gone".into())),
                 }
             }
+            FetchFor::Video { msg } => fx.videos.push(Media { msg, file: f.buf }),
         }
+        fx
+    }
+
+    /// After a sync: publish our DM relay list (kind 10050) without asking: the user's relays
+    /// (set on the phone page, the defaults until changed) that are up now. At once when none
+    /// was published yet or a published relay was taken off the list; otherwise at most once
+    /// every `DM_RELAYS_REFRESH` while the relays that are up change.
+    fn auto_dm_relays(&mut self) -> Effects {
+        let mut fx = Effects::default();
+        let list: Vec<String> = self.relays.iter().filter(|r| self.relays_open.contains(r)).cloned().collect();
+        if !self.link_up || list.is_empty() {
+            return fx;
+        }
+        let same = {
+            let (mut a, mut b) = (self.auth_relays.clone(), list.clone());
+            a.sort();
+            b.sort();
+            a == b
+        };
+        let dropped = self.auth_relays.iter().any(|r| !self.relays.contains(r));
+        let due = self.auth_relays.is_empty() || dropped || (!same && self.now().saturating_sub(self.dm_relays_at) >= DM_RELAYS_REFRESH);
+        if same || !due {
+            return fx;
+        }
+        let Ok(ev) = nip17::dm_relays_event(&self.me.sk, &list, self.now()) else { return fx };
+        self.auth_relays = list;
+        self.dm_relays_at = self.now();
+        fx.frames.push(link::publish(&ev, None));
+        fx.changed = true;
         fx
     }
 
@@ -839,7 +982,8 @@ impl Session {
         }
         let ev = nip17::dm_relays_event(&self.me.sk, &self.relays, self.now())?;
         self.auth_relays = self.relays.clone();
-        Ok(Effects { frames: vec![link::publish(&ev, None)], ..Effects::default() })
+        self.dm_relays_at = self.now();
+        Ok(Effects { frames: vec![link::publish(&ev, None)], changed: true, ..Effects::default() })
     }
 
     pub fn save_contact(&mut self, pk: PublicKey, name: &str) -> Result<()> {
@@ -991,19 +1135,162 @@ mod tests {
     }
 
     #[test]
-    fn eleven_relays_fit_the_auth_budget_once() {
-        // The new default pool: 11 relays. On one link each may ask once; the Passport answers
-        // at most AUTH_TOTAL (8) in a minute, so relays 9.. stay unauthenticated until it passes.
+    fn the_default_pool_fits_the_auth_budget() {
+        // All 14 default relays may ask once on one link and each gets its answer; a phone that
+        // keeps announcing more gets none past AUTH_TOTAL in a minute.
         let mut s = session();
         s.link_changed(true);
-        let relays: Vec<String> = (0..11).map(|i| format!("wss://r{i}.example")).collect();
+        let relays: Vec<String> = (0..20).map(|i| format!("wss://r{i}.example")).collect();
         s.handle_frame(&serde_json::json!({"t":"hello","client":"c","relays":relays}).to_string());
-        assert_eq!(s.relays.len(), 11);
+        assert_eq!(s.relays.len(), MAX_POOL);
         let signed = relays
             .iter()
             .filter(|r| !frames_of(&s.handle_frame(&serde_json::json!({"t":"auth","relay":r,"challenge":"c1"}).to_string()), "auth").is_empty())
             .count();
-        assert_eq!(signed, AUTH_TOTAL, "documents the cap: 3 of 11 relays get no AUTH within the minute");
+        assert_eq!(signed, AUTH_TOTAL);
+    }
+
+    fn eose(s: &mut Session) -> Effects { s.handle_frame(r#"{"t":"eose"}"#) }
+
+    fn open(s: &mut Session, open: &[&str]) { s.handle_frame(&serde_json::json!({"t":"relays","up":open.len(),"total":14,"open":open}).to_string()); }
+
+    fn hello(s: &mut Session, relays: &[&str]) { s.handle_frame(&serde_json::json!({"t":"hello","client":"c","relays":relays}).to_string()); }
+
+    #[test]
+    fn dm_relays_are_published_without_asking() {
+        let tags = |fx: &Effects| -> Vec<String> {
+            frames_of(fx, "publish").first().map(|p| p["ev"]["tags"].as_array().unwrap().iter().map(|t| t[1].as_str().unwrap().to_string()).collect()).unwrap_or_default()
+        };
+        let mut s = session();
+        s.link_changed(true);
+        hello(&mut s, &["wss://a.example", "wss://b.example", "wss://c.example"]);
+        // The user's relays that are up; one the phone reports as open but not on the list is not.
+        open(&mut s, &["wss://a.example", "wss://evil.example", "wss://c.example"]);
+        let fx = eose(&mut s);
+        assert_eq!(tags(&fx), ["wss://a.example", "wss://c.example"]);
+        assert_eq!(frames_of(&fx, "publish")[0]["ev"]["kind"], 10050);
+        assert!(fx.changed, "the app persists the list and its time");
+        // b comes up: within the hour nothing, after it the list follows.
+        open(&mut s, &["wss://a.example", "wss://b.example", "wss://c.example"]);
+        assert!(tags(&eose(&mut s)).is_empty());
+        s.set_now(1_790_000_000 + DM_RELAYS_REFRESH);
+        assert_eq!(tags(&eose(&mut s)).len(), 3);
+        // Unchanged: nothing.
+        s.set_now(1_790_000_000 + 5 * DM_RELAYS_REFRESH);
+        assert!(tags(&eose(&mut s)).is_empty());
+        // The user takes c off the list on the phone: published again at once.
+        s.set_now(1_790_000_000 + 5 * DM_RELAYS_REFRESH + 10);
+        hello(&mut s, &["wss://a.example", "wss://b.example"]);
+        assert_eq!(tags(&eose(&mut s)), ["wss://a.example", "wss://b.example"]);
+        // Nothing up: nothing.
+        let mut t = session();
+        t.link_changed(true);
+        hello(&mut t, &["wss://a.example"]);
+        open(&mut t, &[]);
+        assert!(tags(&eose(&mut t)).is_empty());
+    }
+
+    #[test]
+    fn a_removed_account_stays_empty_when_added_again() {
+        let (mut alice, mut bob) = (session(), session());
+        alice.link_changed(true);
+        bob.link_changed(true);
+        let old = frames_of(&bob.send(&alice.me.pk, "before the removal").unwrap(), "publish");
+        let mine = frames_of(&alice.send(&bob.me.pk, "mine, before").unwrap(), "publish");
+        // Alice's account is removed, then added again later: same key, empty inbox.
+        let mut again = Session::new(Identity::from_secret(alice.me.sk.clone()), vec![], Inbox::default());
+        again.wiped_at = 1_790_000_000;
+        again.set_now(1_790_000_000 + 100);
+        assert_eq!(again.since(), 1_790_000_000 - TIME_JITTER - 3600, "the sync starts at the removal");
+        // Relays still have the old wraps: they stay deleted, ours and theirs.
+        assert!(again.handle_frame(&deliver(&old[0]["ev"])).arrived.is_empty());
+        again.handle_frame(&deliver(&mine[1]["ev"]));
+        assert!(again.inbox.chats.is_empty());
+        // New ones arrive as usual.
+        bob.set_now(1_790_000_000 + 50);
+        let new = frames_of(&bob.send(&alice.me.pk, "after").unwrap(), "publish");
+        assert_eq!(again.handle_frame(&deliver(&new[0]["ev"])).arrived[0].text, "after");
+    }
+
+    #[test]
+    fn all_history_can_be_fetched_again() {
+        let mut s = session();
+        s.link_changed(true);
+        eose(&mut s);
+        assert!(s.since() > 0);
+        let fx = s.fetch_all_history();
+        let hello = frames_of(&fx, "hello");
+        assert_eq!(hello[0]["since"], 0, "from the beginning");
+        assert!(fx.changed && !s.synced);
+        s.wiped_at = 1_780_000_000;
+        assert_eq!(frames_of(&s.fetch_all_history(), "hello")[0]["since"], 1_780_000_000 - TIME_JITTER - 3600);
+    }
+
+    #[test]
+    fn messages_written_in_other_apps_with_the_same_key_show_up() {
+        // Another app with Alice's key (0xchat, Amethyst) writes to Bob and copies itself, then
+        // deletes a message and reacts there: the Passport follows.
+        let (mut alice, bob) = (session(), session());
+        let mut other = Session::new(Identity::from_secret(alice.me.sk.clone()), vec![], Inbox::default());
+        other.set_now(1_790_000_000);
+        other.link_changed(true);
+        let a = frames_of(&other.send(&bob.me.pk, "from my phone app").unwrap(), "publish");
+        let b = frames_of(&other.send(&bob.me.pk, "typo").unwrap(), "publish");
+        for p in [&a[1], &b[1]] {
+            alice.handle_frame(&deliver(&p["ev"]));
+        }
+        let peer = bob.me.pk.to_hex();
+        assert_eq!(alice.inbox.chat(&peer).unwrap().messages.len(), 2);
+        assert!(alice.inbox.chat(&peer).unwrap().messages.iter().all(|m| m.out));
+        let first = alice.inbox.chat(&peer).unwrap().messages[0].id.clone();
+        let typo = alice.inbox.chat(&peer).unwrap().messages[1].id.clone();
+        let react = frames_of(&other.react(&bob.me.pk, &first, "🔥").unwrap(), "publish");
+        let del = nip17::wrap_for(&other.me.sk, &bob.me.pk, nip17::delete_rumor(&other.me.pk, &bob.me.pk, &[typo], nip17::KIND_CHAT, 1_790_000_001).unwrap(), 1_790_000_001).unwrap();
+        let mine = del.wraps.iter().find(|(r, _)| *r == other.me.pk).unwrap().1.clone();
+        alice.handle_frame(&deliver(&serde_json::to_value(&mine).unwrap()));
+        let me = alice.me.pk.to_hex();
+        for p in react.iter().filter(|p| p["to"] == me) {
+            alice.handle_frame(&deliver(&p["ev"]));
+        }
+        let chat = alice.inbox.chat(&peer).unwrap();
+        assert_eq!(chat.messages.len(), 1, "deleted there, deleted here");
+        assert_eq!(chat.messages[0].reactions[0].emoji, "🔥");
+    }
+
+    fn blob(id: &str, w: u32, h: u32, data: &[u8]) -> String {
+        use base64::Engine as _;
+        serde_json::json!({"t":"blob","id":id,"seq":0,"last":true,"w":w,"h":h,"data":base64::engine::general_purpose::STANDARD.encode(data)}).to_string()
+    }
+
+    #[test]
+    fn videos_and_animated_pictures_come_back_as_files_to_play_here() {
+        let (mut alice, mut bob) = (session(), session());
+        alice.link_changed(true);
+        bob.link_changed(true);
+        let pubs = frames_of(&alice.send(&bob.me.pk, "https://v.example/clip.mp4").unwrap(), "publish");
+        bob.handle_frame(&deliver(&pubs[0]["ev"]));
+        let id = bob.inbox.chat(&alice.me.pk.to_hex()).unwrap().messages[0].id.clone();
+        let fx = bob.load_video(&id, "https://v.example/clip.mp4").unwrap();
+        let fetch = frames_of(&fx, "fetch");
+        assert_eq!((fetch[0]["as"].as_str(), fetch[0]["max"].as_u64()), (Some("file"), Some(MAX_VIDEO_BYTES as u64)));
+        let fx = bob.handle_frame(&blob(fetch[0]["id"].as_str().unwrap(), 0, 0, b"the mp4 bytes"));
+        assert_eq!(fx.videos.len(), 1);
+        assert_eq!((fx.videos[0].msg.as_str(), fx.videos[0].file.as_slice()), (id.as_str(), &b"the mp4 bytes"[..]));
+        // An animated GIF link: the phone sends the file (w = h = 0); its frames and the file
+        // itself (to save a copy that still moves) come back.
+        let mut gif = Vec::new();
+        {
+            let mut enc = image::codecs::gif::GifEncoder::new(&mut gif);
+            for i in 0..3u8 {
+                let img = image::RgbaImage::from_pixel(8, 8, image::Rgba([i * 80, 0, 0, 255]));
+                enc.encode_frame(image::Frame::from_parts(img, 0, 0, image::Delay::from_numer_denom_ms(50, 1))).unwrap();
+            }
+        }
+        let fx = bob.load_picture(&id, "https://g.example/a.gif").unwrap();
+        let fetch = frames_of(&fx, "fetch");
+        let pics = bob.handle_frame(&blob(fetch[0]["id"].as_str().unwrap(), 0, 0, &gif)).pictures;
+        assert_eq!(pics[0].frames.len(), 3);
+        assert_eq!((pics[0].ext, pics[0].file.len()), ("gif", gif.len()));
     }
 
     #[test]

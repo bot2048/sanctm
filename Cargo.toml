@@ -24,6 +24,7 @@ foundation-themes = { path = ".foundation-sdk/current/lib/keyos/sdk/crates/found
 security = { path = ".foundation-sdk/current/lib/keyos/api/security" }
 haptics = { path = ".foundation-sdk/current/lib/keyos/api/haptics" }
 rgb-led = { path = ".foundation-sdk/current/lib/keyos/api/rgb-led" }
+backup = { path = ".foundation-sdk/current/lib/keyos/api/backup" }
 
 # The phone link in the simulator: a WebSocket server standing in for QuantumLink, which
 # KeyOS 1.4 does not open to third-party apps (QLv2 in KeyOS 1.5). tokio's mio backend does

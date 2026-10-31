@@ -5,7 +5,7 @@ import { S, App, Actions, Utils, Pages, Confirm, Overlay, ChatRow, MsgRow, Conta
 import { LoadingPage, OnboardingPage, ImportPage } from "pages/start.slint";
 import { ChatsPage } from "pages/chats.slint";
 import { ThreadPage } from "pages/thread.slint";
-import { NewChatPage, ContactPage, MePage, AccountsPage } from "pages/people.slint";
+import { NewChatPage, ContactPage, MePage, AccountsPage, RemoveAccountPage } from "pages/people.slint";
 import { ErrorPage } from "pages/notice.slint";
 import { PicturePage } from "pages/picture.slint";
 import { ConfirmModal } from "widgets.slint";
@@ -61,6 +61,10 @@ export component AppWindow inherits Window {
         height: parent.height;
     }
     if App.page == Pages.accounts: AccountsPage {
+        width: parent.width;
+        height: parent.height;
+    }
+    if App.page == Pages.remove-account: RemoveAccountPage {
         width: parent.width;
         height: parent.height;
     }

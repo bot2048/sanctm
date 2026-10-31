@@ -107,7 +107,7 @@ export component PicturePage inherits Rectangle {
                 }
             }
             Text {
-                text: App.viewer-kept ? "Kept in Sanctm, sealed: it shows without the phone." : "Keep it sealed in Sanctm, or save a copy to Passport storage, the Airlock or a USB drive.";
+                text: App.viewer-kept ? "Kept in Sanctm, sealed: it shows without the phone." : App.viewer-moving ? "Plays here without sound. Save a copy to Passport storage, the Airlock or a USB drive." : "Keep it sealed in Sanctm, or save a copy to Passport storage, the Airlock or a USB drive.";
                 color: App.viewer-kept ? S.ok : S.faint;
                 font-family: S.sans;
                 font-size: S.t-meta;
@@ -139,13 +139,14 @@ export component PicturePage inherits Rectangle {
                 padding-bottom: 28px;
                 spacing: S.s3;
                 Text {
-                    text: "Save picture";
+                    text: App.viewer-video ? "Save video" : "Save picture";
                     color: S.text;
                     font-family: S.sans;
                     font-size: S.t-title;
                     font-weight: 700;
                 }
-                SaveOption {
+                // A sealed copy is a still picture: offered for those only.
+                if !App.viewer-moving: SaveOption {
                     icon: Images.image("lock-p");
                     title: App.viewer-kept ? "Kept in Sanctm" : "Keep in Sanctm";
                     detail: App.viewer-kept ? "Sealed on this Passport. Tap to remove it from Sanctm." : "Sealed with this Passport's key. Only Sanctm opens it, and it shows without the phone (up to 30).";
@@ -174,7 +175,7 @@ export component PicturePage inherits Rectangle {
                     }
                 }
                 Text {
-                    text: "Or save a plain PNG copy (not sealed) in a folder you pick:";
+                    text: App.viewer-video ? "Save the video as it was sent (MP4, not sealed) in a folder you pick:" : App.viewer-moving ? "Save the GIF as it was sent (not sealed) in a folder you pick:" : "Or save a plain PNG copy (not sealed) in a folder you pick:";
                     color: S.muted;
                     font-family: S.sans;
                     font-size: 13px;

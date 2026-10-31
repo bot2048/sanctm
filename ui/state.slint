@@ -48,6 +48,8 @@ export struct MsgRow {
     media-title: string,
     media-detail: string,
     media-icon: string,   // photo | video | voice | file | link | retry
+    // The picture shown moves ("GIF" or "Video", "" if not): it plays when opened.
+    anim: string,
     picture: image,
     pic-w: int,
     pic-h: int,
@@ -77,6 +79,9 @@ export struct AccountRow {
     has-avatar: bool,
     imported: bool,
     current: bool,
+    // Where its key is backed up ("In your seed words" / "In your Passport backup"), and when
+    // it was last shown, if ever.
+    place: string,
 }
 
 export global Pages {
@@ -92,6 +97,7 @@ export global Pages {
     out property <int> error: 9;
     out property <int> picture: 10;
     out property <int> accounts: 11;
+    out property <int> remove-account: 12;
 }
 
 // KeyOS's own neutrals (warm near-black #231f20 in dark, white in light, Foundation's greys),
@@ -212,8 +218,9 @@ export global App {
     in property <string> link-title: "";
     in property <string> link-detail: "";
     in property <[string]> relays;
-    in property <string> relay-note: "";
-    in property <bool> relay-note-error: false;
+    // The DM relay list this account published (kind 10050), and when ("" if never).
+    in property <[string]> dm-relays;
+    in property <string> dm-relays-when: "";
 
     // Chats
     in property <[ChatRow]> chats;
@@ -297,9 +304,27 @@ export global App {
     in property <int> viewer-w: 0;
     in property <int> viewer-h: 0;
     in property <bool> viewer-kept: false;
+    // An animation or a video: it plays, and a saved copy is its own file (not kept in Sanctm).
+    in property <bool> viewer-moving: false;
+    in property <bool> viewer-video: false;
     // The folder the last copy went to ("Passport storage / Pictures"), offered as one tap;
     // "" before the first copy.
     in property <string> last-save: "";
+
+    // Removing an account
+    in property <int> remove-slot: 0;
+    in property <string> remove-name: "";
+    in property <string> remove-npub: "";
+    in property <bool> remove-imported: false;
+    // Its nsec, once the user asked to see it ("" until then).
+    in property <string> remove-nsec: "";
+    in property <string> remove-nsec-chunked: "";
+    // "Key shown on Oct 31" once it was shown, else "".
+    in property <string> remove-shown: "";
+    // The Passport backup after an account change: "Passport backup: Oct 31", "Backing up…",
+    // "Not backed up yet…", or "" before the first change.
+    in property <string> backup-note: "";
+    in property <bool> backup-due: false;
 
     // Import
     in-out property <string> import-text: "";
@@ -357,9 +382,11 @@ export global Actions {
     callback show-accounts();
     callback switch-account(int);
     callback add-account();              // a new key derived from this Passport's seed
+    callback start-remove(int);          // the remove page for this account
+    callback show-remove-key();          // reveal its nsec there, to write it down
     callback remove-account(int);
     callback set-show-profiles(bool);
-    callback publish-relays();
+    callback fetch-history();            // ask the relays for every message again
     callback go-home();
     callback retry-load();
     // Messages

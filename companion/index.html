@@ -130,7 +130,7 @@
 
   <details>
     <summary>Settings</summary>
-    <div style="margin-top:8px">Relays (one per line):</div>
+    <div style="margin-top:8px">Your relays, one per line. The Passport publishes the ones that are up as your DM inbox (kind 10050) by itself; "Defaults" brings back the 14 it starts with.</div>
     <textarea id="relaysEdit" spellcheck="false"></textarea>
     <div style="margin-top:10px">Passport link (simulator stand-in for QuantumLink):</div>
     <input id="linkUrl" spellcheck="false">
@@ -168,6 +168,9 @@
     "wss://relay.primal.net",
     "wss://relay.snort.social",
     "wss://wot.nostr.party",
+    "wss://nos.lol",
+    "wss://relay.0xchat.com",
+    "wss://auth.nostr1.com",
   ];
   const host = (!location.hostname || location.hostname === "0.0.0.0") ? "localhost" : location.hostname;
   const DEFAULT_LINK = `ws://${host}:9878`;
@@ -202,9 +205,9 @@
   const short = (u) => u.replace(/^wss?:\/\//, "").replace(/\/$/, "");
   const kb = (ev) => (JSON.stringify(ev).length / 1024).toFixed(1) + " KB";
   const isHex = (s, n) => typeof s === "string" && s.length === n && /^[0-9a-f]+$/.test(s);
-  // Relay URLs from a kind 10050 (ours or someone else's), at most 8, normalised.
+  // Relay URLs from a kind 10050 (ours or someone else's), at most 16, normalised.
   const relayTags = (ev) => !Array.isArray(ev && ev.tags) ? [] : parseRelays(ev.tags
-    .filter((t) => Array.isArray(t) && t[0] === "relay" && typeof t[1] === "string").map((t) => t[1])).ok.slice(0, 8);
+    .filter((t) => Array.isArray(t) && t[0] === "relay" && typeof t[1] === "string").map((t) => t[1])).ok.slice(0, 16);
   // The Passport refuses link frames over 128 KB (core/src/link.rs), so bigger wraps are dropped here.
   const MAX_WRAP_BYTES = 120 * 1024;
   const isWrapFor = (ev, pk) => ev.kind === 1059 && isHex(ev.id, 64) && isHex(ev.pubkey, 64) && isHex(ev.sig, 128) &&
@@ -280,9 +283,10 @@
       box.append(d);
     }
     if (!relays.size) box.textContent = "No relays configured.";
-    const pool = [...relays.values()].filter((r) => !r.temp);
-    const up = pool.filter((r) => r.state === "open").length;
-    tellPassport({ t: "relays", up, total: pool.length });
+    const pool = [...relays.entries()].filter(([, r]) => !r.temp);
+    const open = pool.filter(([, r]) => r.state === "open").map(([u]) => u);
+    // The Passport publishes the default relays that are open as our DM relays (kind 10050).
+    tellPassport({ t: "relays", up: open.length, total: pool.length, open });
   }
 
   function openRelay(url, temp = false) {
@@ -333,12 +337,25 @@
     return false;
   }
 
+  // Full history (since 0) comes in pages: relays cap a request at a few hundred events, so
+  // while one keeps returning full pages, the next page asks for older ones (until = oldest).
+  const PAGE = 500;
   function subscribe(url) {
     if (!me) return;
+    const r = relays.get(url);
     const filter = { kinds: [1059], "#p": [me.pk] };
-    if (me.since) filter.since = me.since; else filter.limit = 500;
+    if (me.since) filter.since = me.since; else filter.limit = PAGE;
+    if (r) { r.page = { n: 0, got: 0, oldest: Infinity }; }
     sendTo(url, ["REQ", "dms", filter]);
     sendTo(url, ["REQ", "inbox", { kinds: [10050], authors: [me.pk], limit: 1 }]);
+  }
+  // A page finished: ask for the next one, or say this relay is done. True if it asked.
+  function nextPage(url, r) {
+    const p = r.page;
+    if (!me || me.since || !p || p.got < PAGE * 0.9 || !Number.isFinite(p.oldest) || p.n >= 40) return false;
+    p.n++; p.got = 0;
+    sendTo(url, ["REQ", "dms-" + p.n, { kinds: [1059], "#p": [me.pk], until: p.oldest - 1, limit: PAGE }]);
+    return true;
   }
 
   function onRelayMessage(url, r, data) {
@@ -348,10 +365,11 @@
     if (type === "EVENT") {
       const [, sub, ev] = m;
       if (!ev || typeof ev !== "object" || !me) return;
-      if (sub === "dms") {
+      if (sub === "dms" || String(sub).startsWith("dms-")) {
         // Only well-formed wraps p-tagged to the current key; nothing while the Passport is away
         // (they come back with the resubscription after its next hello).
         if (!isWrapFor(ev, me.pk) || !passportUp()) return;
+        if (r.page) { r.page.got++; r.page.oldest = Math.min(r.page.oldest, ev.created_at); }
         const k = wrapKey(ev);
         if (forwarded.has(k)) return;
         forwarded.add(k);
@@ -375,7 +393,10 @@
       }
     } else if (type === "EOSE") {
       const [, sub] = m;
-      if (sub === "dms") { r.eose = true; renderRelays(); maybeEose(); }
+      if (sub === "dms" || String(sub).startsWith("dms-")) {
+        if (sub !== "dms") sendTo(url, ["CLOSE", sub]);
+        if (!nextPage(url, r)) { r.eose = true; renderRelays(); maybeEose(); }
+      }
       if (String(sub).startsWith("lookup-")) { const q = lookups.get(sub); if (q) q.eose(url); }
     } else if (type === "OK") {
       const [, id, ok, msg] = m;
@@ -399,7 +420,7 @@
         askAuth(url, r);
         return;
       }
-      if (sub === "dms") { r.eose = true; maybeEose(); }
+      if (sub === "dms" || String(sub).startsWith("dms-")) { r.eose = true; maybeEose(); }
       if (String(sub).startsWith("lookup-")) { const q = lookups.get(sub); if (q) q.eose(url); }
     } else if (type === "NOTICE") {
       log(`notice from ${esc(short(url))}: ${esc(String(m[1]).slice(0, 140))}`);
@@ -676,6 +697,16 @@
         return;
       }
       const { buf } = await download(String(f.url), 15 * 1024 * 1024);
+      // An animated GIF or WebP goes to the Passport as the file (w = h = 0): it decodes the
+      // frames itself, and a copy saved there still moves.
+      const animated = (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) ||
+        (String.fromCharCode(...buf.subarray(8, 16)) === "WEBPVP8X" && (buf[20] & 0x02));
+      if (f.as === "picture" && animated && buf.length <= (Number(f.max) || 0)) {
+        if (gen !== fetchGen) return;
+        sendChunks(id, buf, 0, 0);
+        log(`↓ animated picture ${(buf.length / 1024).toFixed(0)} KB (played on Passport)`);
+        return;
+      }
       let bmp;
       try { bmp = await createImageBitmap(new Blob([buf])); } catch (_) { throw new Error("not a picture"); }
       let sx = 0, sy = 0, sw = bmp.width, sh = bmp.height, tw = w, th = h;
@@ -730,14 +761,14 @@
     if (ev.kind === 10050) {
       targets = pool; note = "your relays";
     } else {
+      // Their DM relays (kind 10050) first, then ours: two Sanctm users always meet on the
+      // shared default relays, and a recipient without a list still gets it.
       const inbox = to ? await inboxRelaysOf(to) : [];
-      if (inbox.length) { targets = inbox; note = (me && to === me.pk) ? "your DM relays" : "their DM relays"; }
-      else { targets = pool; note = (me && to === me.pk) ? "your relays" : "your relays (they published no DM relay list)"; }
+      targets = inbox.concat(pool);
+      note = (me && to === me.pk) ? "your relays" : inbox.length ? "their DM relays and yours" : "your relays (they published no DM relay list)";
     }
-    // Someone's inbox list is already at most 8 (relayTags); our own pool may be up to 12 (the
-    // Passport's hello cap): 11 default relays sliced to 8 left relay.primal.net, relay.snort.social
-    // and wot.nostr.party without our kind 10050 or our wraps.
-    targets = [...new Set(targets)].slice(0, 12);
+    // Their list is at most 16 (relayTags), our pool too (the Passport's hello cap).
+    targets = [...new Set(targets)].slice(0, 24);
     const results = new Map();
     const held = [];
     await new Promise((resolve) => {

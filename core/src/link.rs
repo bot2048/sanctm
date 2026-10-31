@@ -17,7 +17,7 @@
 //!   {"t":"eose"}                                            initial sync finished
 //!   {"t":"ok","id":"<wrap id>","accepted":["wss://…"],"failed":["wss://…: reason"]}
 //!   {"t":"auth","relay":"wss://…","challenge":"…"}          NIP-42, sign it please
-//!   {"t":"relays","up":3,"total":4}
+//!   {"t":"relays","up":3,"total":4,"open":["wss://…"]}     open: the relays connected now
 //!   {"t":"ping"} | {"t":"pong"}
 //!   {"t":"profile","ev":{kind 0},"nip05_ok":true}          a profile the Passport asked for
 //!   {"t":"nip05","q":"alice@example.com","pubkey":"<hex>"}  a NIP-05 lookup answered
@@ -29,6 +29,7 @@
 //!   {"t":"profiles","pks":["<hex>",…]}                     fetch these kind 0s
 //!   {"t":"nip05","q":"alice@example.com"}                   resolve an address
 //!   {"t":"fetch","id":"…","url":"https://…","as":"avatar"|"picture"|"file","w":…,"h":…,"max":…}
+//!                     a "picture" that is an animated GIF comes back as the file (w = h = 0)
 //!   {"t":"ping"} | {"t":"pong"}
 //! ```
 //!
@@ -80,6 +81,9 @@ pub enum Inbound {
         up: u32,
         #[serde(default)]
         total: u32,
+        /// The pool relays connected now (missing from older companions).
+        #[serde(default)]
+        open: Vec<String>,
     },
     Ping {},
     Pong {},
@@ -197,7 +201,11 @@ mod tests {
         assert!(matches!(parse(r#"{"t":"eose"}"#).unwrap(), Inbound::Eose {}));
         assert!(matches!(parse(r#"{"t":"ok","id":"ab","accepted":["wss://a"]}"#).unwrap(), Inbound::Ok { .. }));
         assert!(matches!(parse(r#"{"t":"auth","relay":"wss://a","challenge":"x"}"#).unwrap(), Inbound::Auth { .. }));
-        assert!(matches!(parse(r#"{"t":"relays","up":2,"total":4}"#).unwrap(), Inbound::Relays { up: 2, total: 4 }));
+        assert!(matches!(parse(r#"{"t":"relays","up":2,"total":4}"#).unwrap(), Inbound::Relays { up: 2, total: 4, .. }));
+        match parse(r#"{"t":"relays","up":1,"total":2,"open":["wss://a"]}"#).unwrap() {
+            Inbound::Relays { open, .. } => assert_eq!(open, vec!["wss://a".to_string()]),
+            _ => panic!(),
+        }
         assert!(matches!(parse(r#"{"t":"ping"}"#).unwrap(), Inbound::Ping {}));
         assert!(parse(r#"{"t":"nope"}"#).is_err());
         assert!(parse("not json").is_err());

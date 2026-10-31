@@ -31,13 +31,14 @@ pub mod nip59;
 pub mod profile;
 pub mod session;
 pub mod vault;
+pub mod video;
 
 pub use error::Error;
 pub use event::{Event, Rumor, UnsignedEvent};
 pub use identity::{derive_from_app_seed, Identity};
 pub use inbox::{Chat, Inbox, Message, Status};
 pub use keys::{PublicKey, SecretKey};
-pub use session::{Arrival, Contact, Effects, Picture, Session};
+pub use session::{Arrival, Contact, Effects, Media, Picture, Session};
 pub use vault::{open_file, seal_file};
 
 pub type Result<T> = core::result::Result<T, Error>;

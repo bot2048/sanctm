@@ -23,6 +23,9 @@ template = ["gui-app", "navigable"]
 # A buzz and a purple LED when a message arrives.
 "os/haptics" = ["Vibrate"]
 "os/rgb-server" = ["SetAllTo"]
+# After an account is added or removed, a fresh encrypted device backup, so the backup matches
+# the accounts on this Passport (an imported key lives only here and in that backup).
+"os/backup" = ["CreateBackup"]
 # Sealed profile / contacts / inbox files in this app's own AppData (durable writes).
 "os/fs" = ["SeekFile", "WriteFile", "TruncateFile", "Flush", "Rename", "Remove",
     # "Save a copy": a PNG in a folder the user picks in Passport storage, the Airlock or a USB

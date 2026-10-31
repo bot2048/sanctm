@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Thin wrappers around KeyOS services: app seed, haptics, LED.
+//! Thin wrappers around KeyOS services: app seed, device backup, haptics, LED.
 
 use std::time::Duration;
 
@@ -10,6 +10,7 @@ use slint_keyos_platform::slint::Timer;
 security::use_api!();
 haptics::use_api!();
 rgb_led::use_api!();
+backup::use_api!();
 
 /// Where the app seed came from.
 pub enum Seed {
@@ -54,6 +55,10 @@ pub fn app_seed() -> Result<Seed, String> {
         }
     }
 }
+
+/// Ask KeyOS for a fresh encrypted device backup. Blocks until it answers: call it off the UI
+/// thread.
+pub fn create_backup() -> Result<(), String> { BackupApi::default().create_backup().map_err(|e| e.to_string()) }
 
 fn flash(color: RgbColor, secs: u64) {
     RgbApi::default().set_all_to(color);

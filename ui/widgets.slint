@@ -227,6 +227,59 @@ export component Btn inherits Rectangle {
     }
 }
 
+// Press and hold for 3 s, for what cannot be undone: it fills while held, and lets go early
+// with nothing done.
+export component HoldButton inherits Rectangle {
+    in property <string> text;
+    callback done();
+    property <float> progress: 0;
+    min-height: S.btn-h;
+    max-height: S.btn-h;
+    preferred-height: S.btn-h;
+    horizontal-stretch: 1;
+    border-radius: S.r-lg;
+    background: S.bad.with-alpha(0.12);
+    border-width: 1px;
+    border-color: S.bad.with-alpha(0.55);
+    Rectangle {
+        x: 0px;
+        width: parent.width * root.progress;
+        height: parent.height;
+        border-radius: S.r-lg;
+        background: S.bad.with-alpha(0.32);
+    }
+    Text {
+        x: S.s6;
+        width: parent.width - 2 * S.s6;
+        text: ta.pressed ? "Keep holding…" : root.text;
+        color: S.bad;
+        font-family: S.sans;
+        font-size: 17px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    ta := TouchArea { }
+    states [
+        holding when ta.pressed: {
+            progress: 1.0;
+            in {
+                animate progress { duration: 3000ms; }
+            }
+            out {
+                animate progress { duration: 150ms; }
+            }
+        }
+    ]
+    Timer {
+        interval: 3000ms;
+        running: ta.pressed;
+        triggered => {
+            root.done();
+        }
+    }
+}
+
 // Round icon button: 40 px to look at, at least 56 px to touch.
 export component IconBtn inherits Rectangle {
     in property <image> icon;
@@ -977,7 +1030,7 @@ export component Bubble inherits Rectangle {
                     }
                 }
                 card-ta := TouchArea {
-                    enabled: root.m.media == 1 || root.m.media == 3 || root.m.media == 6;
+                    enabled: root.m.media == 1 || root.m.media == 3 || root.m.media == 6 || root.m.media == 7;
                     clicked => {
                         root.media-tapped();
                     }
@@ -995,6 +1048,22 @@ export component Bubble inherits Rectangle {
                 pic-ta := TouchArea {
                     clicked => {
                         root.picture-tapped();
+                    }
+                }
+                // Plays when opened.
+                if root.m.anim != "": Rectangle {
+                    x: parent.width - self.width - 8px;
+                    y: 8px;
+                    height: 20px;
+                    width: gif-t.preferred-width + 12px;
+                    border-radius: S.r-sm;
+                    background: #000000a6;
+                    gif-t := Text {
+                        text: root.m.anim;
+                        color: #ffffff;
+                        font-family: S.sans;
+                        font-size: 11px;
+                        font-weight: 700;
                     }
                 }
                 if root.m.kept: Rectangle {

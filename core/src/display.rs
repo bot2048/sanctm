@@ -156,6 +156,16 @@ pub fn picture_url(text: &str) -> Option<String> {
     })
 }
 
+/// The first video link in a message (http(s) URL ending in a video extension), if any.
+pub fn video_url(text: &str) -> Option<String> {
+    text.split_whitespace().map(|w| w.trim_matches(|c: char| matches!(c, '(' | ')' | '<' | '>' | '"' | '\'' | ',' | '.'))).find_map(|w| {
+        let path = w.split(['?', '#']).next().unwrap_or("").to_ascii_lowercase();
+        let video = [".mp4", ".webm", ".mov", ".m4v"].iter().any(|e| path.ends_with(e));
+        let url = crate::profile::https_url(w);
+        (video && !url.is_empty()).then_some(url)
+    })
+}
+
 /// The letter on an avatar.
 pub fn initial(name: &str) -> String {
     name.chars().find(|c| c.is_alphanumeric()).map(|c| c.to_uppercase().to_string()).unwrap_or_else(|| "#".into())

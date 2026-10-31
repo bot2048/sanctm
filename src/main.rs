@@ -31,7 +31,7 @@ use slint_keyos_platform::gui_server_api::navigation::qrscanner::{MatchedQrResul
 use slint_keyos_platform::gui_server_api::InputMessage;
 use slint_keyos_platform::navigation::{open_qr_scanner, select_file};
 use slint_keyos_platform::slint::{
-    Color, ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel, Weak,
+    Color, ComponentHandle, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel, Weak,
 };
 
 app_ui2!("Sanctm");
@@ -49,6 +49,7 @@ const PAGE_ME: i32 = 8;
 const PAGE_ERROR: i32 = 9;
 const PAGE_PICTURE: i32 = 10;
 const PAGE_ACCOUNTS: i32 = 11;
+const PAGE_REMOVE: i32 = 12;
 
 const SCAN_NPUB: i32 = 0;
 const SCAN_NSEC: i32 = 1;
@@ -58,10 +59,16 @@ const MAX_PICS_IN_MEMORY: usize = 12;
 /// Kept pictures read from storage when a chat opens (the newest ones).
 const KEPT_PRELOAD: usize = 6;
 
-/// A picture in a message, as far as this run knows.
+/// Animations whose frames stay in memory (each up to 20 MB); older ones show their first
+/// frame only.
+const MAX_ANIMS_IN_MEMORY: usize = 3;
+
+/// A picture in a message, as far as this run knows. `frames`: an animation's (or a video's)
+/// frames and how long each shows (ms), empty for a still picture; `file`, `ext`: its own file,
+/// for a saved copy that still moves.
 enum Pic {
     Loading,
-    Ready { w: u32, h: u32, buf: SharedPixelBuffer<Rgba8Pixel>, img: Image, kept: bool },
+    Ready { w: u32, h: u32, buf: SharedPixelBuffer<Rgba8Pixel>, img: Image, kept: bool, frames: Vec<(Image, u32)>, file: Vec<u8>, ext: &'static str },
     Failed(String),
 }
 
@@ -116,8 +123,11 @@ struct State {
     /// Message with its action bar open; message being answered on the compose page.
     selected: Option<String>,
     reply_to: Option<String>,
-    /// Message whose picture is on the viewer page.
+    /// Message whose picture is on the viewer page, and the frame it shows (animations).
     viewer: Option<String>,
+    viewer_frame: usize,
+    /// A device backup was asked for and has not answered yet.
+    backup_running: bool,
     new_chat: NewChat,
     /// Unsent text per chat (hex key): a draft for one person must never sit, ready to send,
     /// in someone else's composer.
@@ -138,6 +148,10 @@ thread_local! {
     static SAVE_PENDING_SINCE: RefCell<Option<std::time::Instant>> = const { RefCell::new(None) };
     static TOAST_TIMER: Timer = Timer::default();
     static CLOCK_TIMER: Timer = Timer::default();
+    /// Steps the viewer through an animation's frames.
+    static ANIM_TIMER: Timer = Timer::default();
+    /// Hides a key shown on the remove page after 30 s.
+    static KEY_TIMER: Timer = Timer::default();
 }
 
 fn with_app(f: impl FnOnce(&AppWindow, &mut State)) {
@@ -182,7 +196,6 @@ fn sentence(e: impl ToString) -> String {
     out
 }
 
-fn plural(n: usize, one: &str, many: &str) -> String { format!("{n} {}", if n == 1 { one } else { many }) }
 
 /// A failed message can be sent again by hand only while a phone is linked (it also goes out
 /// by itself on the next link).
@@ -422,6 +435,15 @@ fn refresh_status(ui: &AppWindow, st: &State) {
     app.set_link_detail(detail.into());
     let relays: Vec<SharedString> = s.relays.iter().map(|r| SharedString::from(r.as_str())).collect();
     app.set_relays(ModelRc::new(VecModel::from(relays)));
+    let dm: Vec<SharedString> = s.auth_relays.iter().map(|r| SharedString::from(r.as_str())).collect();
+    app.set_dm_relays(ModelRc::new(VecModel::from(dm)));
+    let when = match (s.dm_relays_at, display::ago(s.now(), s.dm_relays_at)) {
+        (0, _) => String::new(),
+        (_, a) if a == "now" => "just now".into(),
+        (_, a) if a.starts_with(|c: char| c.is_ascii_digit()) => format!("{a} ago"),
+        (_, a) => format!("on {a}"),
+    };
+    app.set_dm_relays_when(when.into());
 }
 
 /// The Me page: our own profile, if we have it.
@@ -473,12 +495,81 @@ fn refresh_accounts(ui: &AppWindow, st: &State) {
                 avatar: avatar.unwrap_or_default(),
                 imported: a.imported,
                 current: a.slot == st.slot && st.session.is_some(),
+                place: match (a.imported, a.shown_at) {
+                    (true, 0) => "In your Passport backup".to_string(),
+                    (false, 0) => "In your seed words".to_string(),
+                    (true, t) => format!("In your Passport backup · key shown {}", day_label(t)),
+                    (false, t) => format!("In your seed words · key shown {}", day_label(t)),
+                }
+                .into(),
             })
         })
         .collect();
     app.set_accounts(ModelRc::new(VecModel::from(rows)));
     app.set_can_add_account(st.accounts.list.len() < store::MAX_ACCOUNTS);
     app.set_next_account_label(format!("Passport account {}", st.accounts.free_index() + 1).into());
+    let note = if st.backup_running {
+        "Backing up this Passport…".to_string()
+    } else if st.accounts.backup_due {
+        "Not in a Passport backup yet: Sanctm asks KeyOS again at the next start.".to_string()
+    } else if st.accounts.backup_at > 0 {
+        format!("Passport backup made {} with these accounts.", day_label(st.accounts.backup_at))
+    } else {
+        String::new()
+    };
+    app.set_backup_due(st.accounts.backup_due && !st.backup_running);
+    app.set_backup_note(note.into());
+}
+
+/// "Oct 31" (or "Oct 31 2025" in another year), for days kept without the time.
+fn day_label(t: u64) -> String {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(t);
+    // Past a week `ago` gives the date.
+    ago(now.max(t) + 7 * 86_400, t)
+}
+
+/// Now, from the session's clock (set by the companion when the device clock is not) or the
+/// system's.
+fn now_secs(st: &State) -> u64 {
+    st.session.as_ref().map(|s| s.now()).filter(|t| *t > 1_700_000_000).unwrap_or_else(|| {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    })
+}
+
+/// After an account change: ask KeyOS for a fresh encrypted device backup, off the UI thread.
+/// Until it confirms, the account list says the change is not backed up, and the next start
+/// asks again.
+fn request_backup(ui: &AppWindow, st: &mut State) {
+    if !st.accounts.backup_due {
+        st.accounts.backup_due = true;
+        if let Err(e) = st.store.save_accounts(&st.accounts) {
+            log::warn!("storage: {e}");
+        }
+    }
+    if st.backup_running {
+        return;
+    }
+    st.backup_running = true;
+    refresh_accounts(ui, st);
+    std::thread::spawn(|| {
+        let r = device::create_backup();
+        let _ = slint_keyos_platform::slint::invoke_from_event_loop(move || {
+            with_app(|ui, st| {
+                st.backup_running = false;
+                match r {
+                    Ok(()) => {
+                        st.accounts.backup_due = false;
+                        st.accounts.backup_at = now_secs(st);
+                        if let Err(e) = st.store.save_accounts(&st.accounts) {
+                            log::warn!("storage: {e}");
+                        }
+                    }
+                    Err(e) => log::warn!("device backup: {e}"),
+                }
+                refresh_accounts(ui, st);
+            })
+        });
+    });
 }
 
 fn refresh_chats(ui: &AppWindow, st: &State) {
@@ -588,6 +679,7 @@ fn msg_row(st: &State, s: &Session, peer: &PublicKey, m: &Message, now: u64) -> 
     let kept = st.kept.iter().any(|k| k.msg == m.id);
     let (idle, label, icon) = match &m.file {
         Some(f) if f.is_image() => (Some((1, "Photo", "Tap to open on Passport")), f.label(), "photo"),
+        Some(f) if f.label() == "Video" => (Some((7, "Video", "Tap to play it here, without sound")), "Video", "video"),
         Some(f) => {
             let icon = match f.label() {
                 "Video" => "video",
@@ -596,27 +688,40 @@ fn msg_row(st: &State, s: &Session, peer: &PublicKey, m: &Message, now: u64) -> 
             };
             (Some((2, f.label(), "Open it in a phone app")), f.label(), icon)
         }
-        None => match display::picture_url(&m.text) {
-            Some(url) => {
+        None => match (display::picture_url(&m.text), display::video_url(&m.text)) {
+            (Some(url), _) => {
                 // A message that is only the link shows the card alone.
                 if text.trim() == url {
                     text.clear();
                 }
                 (Some((3, "Picture link", "Tap to load. Your phone fetches it.")), "Picture", "link")
             }
-            None => (None, "", ""),
+            (None, Some(url)) => {
+                if text.trim() == url {
+                    text.clear();
+                }
+                (Some((7, "Video link", "Tap to play it here, without sound")), "Video", "video")
+            }
+            (None, None) => (None, "", ""),
         },
     };
     if let Some((kind, title, detail)) = idle {
         let (media, title, detail, icon) = match st.pics.get(&m.id) {
-            Some(Pic::Ready { w, h, img, kept, .. }) => {
+            Some(Pic::Ready { w, h, img, kept, frames, ext, .. }) => {
                 row.picture = img.clone();
                 row.pic_w = *w as i32;
                 row.pic_h = *h as i32;
                 row.kept = *kept;
+                row.anim = match (frames.is_empty(), *ext) {
+                    (true, _) => "",
+                    (false, "mp4") => "Video",
+                    (false, _) => "GIF",
+                }
+                .into();
                 (5, String::new(), String::new(), icon)
             }
             Some(Pic::Loading) if kind == 3 => (4, "Loading picture…".into(), "Your phone fetches it".into(), icon),
+            Some(Pic::Loading) if kind == 7 => (4, "Getting the video ready…".into(), "Your phone fetches it, the Passport plays it".into(), icon),
             Some(Pic::Loading) => (4, "Opening on Passport…".into(), "Your phone fetches the sealed file".into(), icon),
             Some(Pic::Failed(e)) => (6, format!("{label} did not open"), format!("{} Tap to try again.", sentence(e)), "retry"),
             None if kept => (kind, "Kept in Sanctm".into(), "Tap to show".into(), "photo"),
@@ -765,12 +870,23 @@ fn refresh_new_chat(ui: &AppWindow, st: &mut State) {
 fn refresh_viewer(ui: &AppWindow, st: &State) {
     let app = ui.global::<App>();
     let Some(id) = st.viewer.as_ref() else { return };
-    let Some(Pic::Ready { w, h, img, kept, .. }) = st.pics.get(id) else { return };
+    let Some(Pic::Ready { w, h, img, kept, frames, ext, .. }) = st.pics.get(id) else { return };
     app.set_viewer_id(id.as_str().into());
-    app.set_viewer_picture(img.clone());
+    match frames.get(st.viewer_frame % frames.len().max(1)) {
+        Some((frame, ms)) => {
+            app.set_viewer_picture(frame.clone());
+            let ms = *ms;
+            if !ANIM_TIMER.with(|t| t.running()) {
+                ANIM_TIMER.with(|t| t.start(TimerMode::SingleShot, Duration::from_millis(u64::from(ms)), next_frame));
+            }
+        }
+        None => app.set_viewer_picture(img.clone()),
+    }
     app.set_viewer_w(*w as i32);
     app.set_viewer_h(*h as i32);
     app.set_viewer_kept(*kept);
+    app.set_viewer_moving(!frames.is_empty());
+    app.set_viewer_video(*ext == "mp4");
     app.set_last_save(st.slot_profile.last_save.as_ref().map(save_label).unwrap_or_default().into());
     let title = match (st.session.as_ref(), st.open_peer) {
         (Some(s), Some(peer)) => match s.inbox.find_message(id) {
@@ -857,6 +973,14 @@ fn save_now(st: &mut State) {
         st.kept.retain(|k| !gone.contains(&k.msg));
         r = r.and_then(|_| st.store.save_kept(&id, &st.kept));
     }
+    // The DM relay list the session published by itself (or the user did), and when.
+    if s.auth_relays != st.slot_profile.dm_relays || s.dm_relays_at != st.slot_profile.dm_relays_at {
+        st.slot_profile.dm_relays = s.auth_relays.clone();
+        st.slot_profile.dm_relays_at = s.dm_relays_at;
+        if let Err(e) = st.store.save_profile(st.slot, &st.slot_profile) {
+            log::warn!("storage: {e}");
+        }
+    }
     // The account list shows each account's own profile; keep its copy current.
     let me = if s.show_profiles { s.profiles.get(&s.me.pk).cloned() } else { None };
     let slot = st.slot;
@@ -914,9 +1038,24 @@ fn focus_composer(ui: &AppWindow) {
 }
 
 fn apply(ui: &AppWindow, st: &mut State, fx: Effects) {
-    let Effects { frames, changed, status, arrived, refused, nip05, pictures, .. } = fx;
+    let Effects { frames, changed, status, arrived, refused, nip05, pictures, videos, .. } = fx;
     for f in &frames {
         st.link.send(f);
+    }
+    // Videos are decoded away from the UI thread (seconds on the device), then shown like an
+    // animated picture.
+    for v in videos {
+        std::thread::spawn(move || {
+            let r = nip_ping_core::video::decode_video(&v.file);
+            let pic = Picture::shown(v.msg, r, v.file, "mp4");
+            let _ = slint_keyos_platform::slint::invoke_from_event_loop(move || {
+                with_app(|ui, st| {
+                    picture_arrived(st, pic);
+                    refresh_thread(ui, st);
+                    refresh_viewer(ui, st);
+                })
+            });
+        });
     }
     if refused > 0 {
         log::warn!("{refused} gift wrap(s) addressed to us did not open");
@@ -1039,7 +1178,7 @@ fn accounts_from_slots(st: &State, lenient: bool) -> Result<store::Accounts, Str
         if a.list.iter().any(|x| x.pk == id.pk.to_hex()) {
             continue;
         }
-        a.list.push(store::Account { slot, pk: id.pk.to_hex(), imported: p.nsec.is_some(), index: p.index.unwrap_or(slot), me: None });
+        a.list.push(store::Account { slot, pk: id.pk.to_hex(), imported: p.nsec.is_some(), index: p.index.unwrap_or(slot), me: None, shown_at: 0 });
     }
     a.current = a.list.first().map(|x| x.slot).unwrap_or(0);
     Ok(a)
@@ -1063,6 +1202,9 @@ fn start(ui: &AppWindow, st: &mut State) {
     }
     let current = st.accounts.current;
     load_account(ui, st, current, None);
+    if st.accounts.backup_due {
+        request_backup(ui, st);
+    }
 }
 
 fn reset_account_view(ui: &AppWindow, st: &mut State) {
@@ -1072,6 +1214,8 @@ fn reset_account_view(ui: &AppWindow, st: &mut State) {
     st.selected = None;
     st.reply_to = None;
     st.viewer = None;
+    st.viewer_frame = 0;
+    ANIM_TIMER.with(|t| t.stop());
     st.pics.clear();
     st.pic_order.clear();
     st.kept.clear();
@@ -1080,8 +1224,6 @@ fn reset_account_view(ui: &AppWindow, st: &mut State) {
     st.draft_peer = None;
     st.storage_note.clear();
     let app = ui.global::<App>();
-    app.set_relay_note(SharedString::new());
-    app.set_relay_note_error(false);
     app.set_compose_text(SharedString::new());
     app.set_toast(SharedString::new());
     ui.global::<Confirm>().set_action(SharedString::new());
@@ -1177,10 +1319,13 @@ fn load_account(ui: &AppWindow, st: &mut State, slot: u32, ready: Option<Identit
             log::warn!("storage: {e}");
         }
     }
+    let identity_pk_hex = identity.pk.to_hex();
     let mut session = Session::new(identity, contacts, inbox);
     session.profiles = people;
     session.show_profiles = profile.show_profiles.unwrap_or(true);
     session.auth_relays = profile.dm_relays.clone();
+    session.dm_relays_at = profile.dm_relays_at;
+    session.wiped_at = st.accounts.wiped_at(&st.store.wipe_tag(&identity_pk_hex));
     st.slot_profile = profile;
     st.session = Some(session);
     if st.link_up {
@@ -1227,7 +1372,7 @@ fn add_account(ui: &AppWindow, st: &mut State, nsec: Option<String>) -> Result<(
     }
     save_now(st);
     st.store.save_profile(slot, &profile)?;
-    st.accounts.list.push(store::Account { slot, pk: identity.pk.to_hex(), imported, index, me: None });
+    st.accounts.list.push(store::Account { slot, pk: identity.pk.to_hex(), imported, index, me: None, shown_at: 0 });
     let before = st.accounts.current;
     st.accounts.current = slot;
     if let Err(e) = st.store.save_accounts(&st.accounts) {
@@ -1237,6 +1382,7 @@ fn add_account(ui: &AppWindow, st: &mut State, nsec: Option<String>) -> Result<(
         return Err(e);
     }
     load_account(ui, st, slot, Some(identity));
+    request_backup(ui, st);
     Ok(())
 }
 
@@ -1256,25 +1402,105 @@ fn switch_account(ui: &AppWindow, st: &mut State, slot: u32) {
     }
 }
 
-/// Remove an account that is not in use. An imported key is forgotten; chats stay sealed
-/// on this Passport and come back if the account is added again.
+/// Groups of four characters, for reading a key off the screen.
+fn chunked(s: &str) -> String { s.as_bytes().chunks(4).map(|c| String::from_utf8_lossy(c).into_owned()).collect::<Vec<_>>().join(" ") }
+
+/// The remove page for an account that is not in use.
+fn start_remove(ui: &AppWindow, st: &mut State, slot: u32) {
+    let Some(acct) = st.accounts.get(slot).cloned() else { return };
+    if slot == st.slot && st.session.is_some() {
+        return;
+    }
+    let app = ui.global::<App>();
+    app.set_remove_slot(slot as i32);
+    app.set_remove_name(account_label(&acct).into());
+    app.set_remove_imported(acct.imported);
+    app.set_remove_nsec(SharedString::new());
+    app.set_remove_nsec_chunked(SharedString::new());
+    app.set_remove_shown(if acct.shown_at == 0 { SharedString::new() } else { format!("Key shown {}.", day_label(acct.shown_at)).into() });
+    app.set_page(PAGE_REMOVE);
+}
+
+/// Put the account's nsec on the remove page, so it can be written down first.
+fn show_remove_key(ui: &AppWindow, st: &mut State) {
+    let app = ui.global::<App>();
+    let slot = app.get_remove_slot().max(0) as u32;
+    let key = st.store.load_profile(slot).map_err(|e| e.to_string()).and_then(|p| {
+        let p = p.or_else(|| st.accounts.get(slot).filter(|a| !a.imported).map(|a| store::Profile { index: Some(a.index), ..Default::default() }));
+        p.ok_or_else(|| "its key file is gone".to_string()).and_then(|p| identity_of(&st.seed, slot, &p))
+    });
+    match key {
+        Ok(id) => {
+            let nsec = encode_nsec(&id.sk);
+            app.set_remove_nsec_chunked(chunked(&nsec).into());
+            app.set_remove_nsec(nsec.into());
+            // Kept by day only: when, not how often.
+            let day = now_secs(st) / 86_400 * 86_400;
+            if let Some(a) = st.accounts.get_mut(slot) {
+                a.shown_at = day;
+            }
+            if let Err(e) = st.store.save_accounts(&st.accounts) {
+                log::warn!("storage: {e}");
+            }
+            app.set_remove_shown(format!("Key shown {}.", day_label(day)).into());
+            KEY_TIMER.with(|t| {
+                t.start(TimerMode::SingleShot, Duration::from_secs(30), || {
+                    with_app(|ui, _| {
+                        let app = ui.global::<App>();
+                        app.set_remove_nsec(SharedString::new());
+                        app.set_remove_nsec_chunked(SharedString::new());
+                    })
+                })
+            });
+        }
+        Err(e) => toast(ui, &format!("The key cannot be shown: {}", sentence(e))),
+    }
+}
+
+/// Remove an account that is not in use, for good: its key file, chats, contacts, profiles and
+/// kept pictures are deleted, and the account list remembers when, so the same key added again
+/// shows nothing older (relays still hold the old gift wraps). A derived account's index is
+/// retired: a new Passport key is a different key.
 fn remove_account(ui: &AppWindow, st: &mut State, slot: u32) {
     if slot == st.slot && st.session.is_some() {
         return;
     }
     let Some(acct) = st.accounts.get(slot).cloned() else { return };
+    // Kept to the day, rounded up to the next UTC midnight: nothing from before the removal
+    // comes back (a same-day re-add also hides that day's new messages).
+    let now = (now_secs(st) / 86_400 + 1) * 86_400;
+    let before = st.accounts.clone();
     st.accounts.list.retain(|a| a.slot != slot);
+    let tag = st.store.wipe_tag(&acct.pk);
+    st.accounts.wiped.retain(|(k, _)| *k != tag);
+    st.accounts.wiped.push((tag, now));
+    if !acct.imported && !st.accounts.retired.contains(&acct.index) {
+        st.accounts.retired.push(acct.index);
+    }
     if let Err(e) = st.store.save_accounts(&st.accounts) {
-        st.accounts.list.push(acct);
-        st.accounts.list.sort_by_key(|a| a.slot);
+        st.accounts = before;
         toast(ui, &format!("Not removed: {e}"));
         return;
     }
-    if let Err(e) = st.store.forget_profile(slot) {
-        log::error!("storage: {e}");
+    let mut problem = st.store.forget_profile(slot).err();
+    if let Ok(pk) = PublicKey::from_hex(&acct.pk) {
+        if let Err(e) = st.store.forget_identity(&data_id(&st.seed, &pk)) {
+            problem.get_or_insert(e);
+        }
     }
-    refresh_accounts(ui, st);
-    toast(ui, if acct.imported { "Account removed. Its key is forgotten on this Passport." } else { "Account removed." });
+    let app = ui.global::<App>();
+    KEY_TIMER.with(|t| t.stop());
+    app.set_remove_nsec(SharedString::new());
+    app.set_remove_nsec_chunked(SharedString::new());
+    app.set_page(PAGE_ACCOUNTS);
+    request_backup(ui, st);
+    match problem {
+        Some(e) => {
+            log::error!("storage: {e}");
+            toast(ui, "Account removed. A file could not be deleted; it stays sealed and is never shown again.");
+        }
+        None => toast(ui, "Account removed from this Passport for good."),
+    }
 }
 
 fn set_show_profiles(ui: &AppWindow, st: &mut State, on: bool) {
@@ -1618,12 +1844,33 @@ fn send(ui: &AppWindow, st: &mut State, text: &str) {
 }
 
 /// Remember a loaded picture (in memory only, unless kept).
-fn remember_picture(st: &mut State, msg: String, w: u32, h: u32, rgba: &[u8], kept: bool) -> bool {
+#[allow(clippy::too_many_arguments)]
+fn remember_picture(st: &mut State, msg: String, w: u32, h: u32, rgba: &[u8], kept: bool, frames: Vec<nip_ping_core::media::Frame>, file: Vec<u8>, ext: &'static str) -> bool {
     let Some(buf) = picture_buffer(w, h, rgba) else { return false };
     let img = Image::from_rgba8(buf.clone());
-    st.pics.insert(msg.clone(), Pic::Ready { w, h, buf, img, kept });
+    let frames: Vec<(Image, u32)> = frames.iter().filter_map(|f| picture_buffer(w, h, &f.rgba).map(|b| (Image::from_rgba8(b), f.ms))).collect();
+    let anim = !frames.is_empty();
+    st.pics.insert(msg.clone(), Pic::Ready { w, h, buf, img, kept, frames, file, ext });
     st.pic_order.retain(|m| *m != msg);
-    st.pic_order.push_back(msg);
+    st.pic_order.push_back(msg.clone());
+    // Bounded memory: older animations keep their first frame only (the one on the viewer stays).
+    if anim {
+        let older: Vec<String> = st
+            .pic_order
+            .iter()
+            .rev()
+            .filter(|m| matches!(st.pics.get(*m), Some(Pic::Ready { frames, .. }) if !frames.is_empty()))
+            .skip(MAX_ANIMS_IN_MEMORY)
+            .filter(|m| st.viewer.as_deref() != Some(m.as_str()))
+            .cloned()
+            .collect();
+        for m in older {
+            if let Some(Pic::Ready { frames, file, .. }) = st.pics.get_mut(&m) {
+                frames.clear();
+                file.clear();
+            }
+        }
+    }
     // Bounded memory: drop the oldest (it comes back from storage if kept, or on a tap).
     while st.pic_order.len() > MAX_PICS_IN_MEMORY {
         let Some(old) = st.pic_order.pop_front() else { break };
@@ -1664,7 +1911,7 @@ fn picture_arrived(st: &mut State, p: Picture) {
         st.pics.insert(p.msg, Pic::Failed(e));
         return;
     }
-    if !remember_picture(st, p.msg.clone(), p.w, p.h, &p.rgba, false) {
+    if !remember_picture(st, p.msg.clone(), p.w, p.h, &p.rgba, false, p.frames, p.file, p.ext) {
         st.pics.insert(p.msg, Pic::Failed("not a picture".into()));
     }
 }
@@ -1683,13 +1930,21 @@ fn load_kept(st: &mut State, msg: &str) -> bool {
     let Some(s) = st.session.as_ref() else { return false };
     let id = data_id(&st.seed, &s.me.pk);
     match st.store.load_picture(&id, msg) {
-        Ok(Some((w, h, rgba))) => remember_picture(st, msg.to_string(), w, h, &rgba, true),
+        Ok(Some((w, h, rgba))) => remember_picture(st, msg.to_string(), w, h, &rgba, true, Vec::new(), Vec::new(), ""),
         Ok(None) => false,
         Err(e) => {
             log::warn!("storage: {e}");
             false
         }
     }
+}
+
+/// Is message `msg` a video (a kind 15 video, or a video link)?
+fn is_video(s: &Session, msg: &str) -> bool {
+    s.inbox.find_message(msg).is_some_and(|m| match &m.file {
+        Some(f) => f.label() == "Video",
+        None => display::picture_url(&m.text).is_none() && display::video_url(&m.text).is_some(),
+    })
 }
 
 fn load_media(ui: &AppWindow, st: &mut State, msg: &str) {
@@ -1701,9 +1956,11 @@ fn load_media(ui: &AppWindow, st: &mut State, msg: &str) {
         return;
     }
     let Some(s) = st.session.as_mut() else { return };
-    let Some((file, url)) = s.inbox.find_message(msg).map(|m| (m.file.is_some(), display::picture_url(&m.text))) else { return };
+    let video = is_video(s, msg);
+    let Some((file, url)) = s.inbox.find_message(msg).map(|m| (m.file.is_some(), display::picture_url(&m.text).or_else(|| display::video_url(&m.text)))) else { return };
     let r = match (file, url) {
         (true, _) => s.load_file(msg),
+        (false, Some(url)) if video => s.load_video(msg, &url),
         (false, Some(url)) => s.load_picture(msg, &url),
         (false, None) => return,
     };
@@ -1717,11 +1974,28 @@ fn load_media(ui: &AppWindow, st: &mut State, msg: &str) {
     refresh_thread(ui, st);
 }
 
+/// The viewer's next animation frame, then the one after (stops when the viewer closes).
+fn next_frame() {
+    with_app(|ui, st| {
+        let on_viewer = ui.global::<App>().get_page() == PAGE_PICTURE;
+        let Some(Pic::Ready { frames, .. }) = st.viewer.as_ref().and_then(|v| st.pics.get(v)) else { return };
+        if !on_viewer || frames.is_empty() {
+            return;
+        }
+        st.viewer_frame = (st.viewer_frame + 1) % frames.len();
+        let (img, ms) = frames[st.viewer_frame].clone();
+        ui.global::<App>().set_viewer_picture(img);
+        ANIM_TIMER.with(|t| t.start(TimerMode::SingleShot, Duration::from_millis(u64::from(ms)), next_frame));
+    })
+}
+
 fn open_picture(ui: &AppWindow, st: &mut State, msg: &str) {
     if !matches!(st.pics.get(msg), Some(Pic::Ready { .. })) {
         return;
     }
     st.selected = None;
+    st.viewer_frame = 0;
+    ANIM_TIMER.with(|t| t.stop());
     st.viewer = Some(msg.to_string());
     refresh_viewer(ui, st);
     refresh_selection(ui, st);
@@ -1820,17 +2094,20 @@ fn save_label(p: &store::SavePlace) -> String {
 /// file browser, opened on one place only (Passport storage, the Airlock or a USB drive), or
 /// straight to the folder used last time (`place` 3).
 fn save_picture_copy(ui: &AppWindow, msg: &str, place: i32) {
-    // Make the PNG first, so no state is borrowed while the file browser is up.
+    // Make the file first, so no state is borrowed while the file browser is up: a GIF or a
+    // video as it was sent (so it still moves), a still picture as a PNG.
     let mut job = None;
     with_app(|ui, st| {
-        let Some(Pic::Ready { w, h, buf, .. }) = st.pics.get(msg) else { return };
+        let Some(Pic::Ready { w, h, buf, file, ext, .. }) = st.pics.get(msg) else { return };
         let now = st.session.as_ref().map_or(0, |s| s.now());
+        let (day, time) = utc_stamp(now);
+        let short: String = msg.chars().take(8).collect();
+        if !file.is_empty() {
+            job = Some((file.clone(), format!("sanctm-{day}-{time}-{short}.{ext}")));
+            return;
+        }
         match nip_ping_core::media::encode_png(*w, *h, buf.as_bytes()) {
-            Ok(png) => {
-                let (day, time) = utc_stamp(now);
-                let short: String = msg.chars().take(8).collect();
-                job = Some((png, format!("sanctm-{day}-{time}-{short}.png")));
-            }
+            Ok(png) => job = Some((png, format!("sanctm-{day}-{time}-{short}.png"))),
             Err(e) => toast(ui, &format!("Not saved: {}", sentence(&e.to_string()))),
         }
     });
@@ -1974,6 +2251,8 @@ fn boot(ui: &AppWindow, fs: std::sync::Arc<FileSystem>) {
         selected: None,
         reply_to: None,
         viewer: None,
+        viewer_frame: 0,
+        backup_running: false,
         new_chat: NewChat::default(),
         drafts: HashMap::new(),
         draft_peer: None,
@@ -2184,40 +2463,30 @@ fn app_main(cx: AppContext, ui: AppWindow) {
 
     actions.on_show_accounts(|| {
         with_app(|ui, st| {
+            // The key shown on the remove page goes from the screen with it.
+            let app = ui.global::<App>();
+            app.set_remove_nsec(SharedString::new());
+            app.set_remove_nsec_chunked(SharedString::new());
+            KEY_TIMER.with(|t| t.stop());
             refresh_accounts(ui, st);
             ui.global::<App>().set_page(PAGE_ACCOUNTS);
         })
     });
 
     actions.on_switch_account(|slot| with_app(|ui, st| switch_account(ui, st, slot.max(0) as u32)));
+    actions.on_start_remove(|slot| with_app(|ui, st| start_remove(ui, st, slot.max(0) as u32)));
+    actions.on_show_remove_key(|| with_app(show_remove_key));
     actions.on_remove_account(|slot| with_app(|ui, st| remove_account(ui, st, slot.max(0) as u32)));
-    actions.on_set_show_profiles(|on| with_app(|ui, st| set_show_profiles(ui, st, on)));
-
-    actions.on_publish_relays(|| {
+    actions.on_fetch_history(|| {
         with_app(|ui, st| {
-            // Sign exactly the list on screen; if the phone changed it meanwhile, nothing is signed.
-            let shown: Vec<String> = ui.global::<App>().get_relays().iter().map(|r| r.to_string()).collect();
             let Some(s) = st.session.as_mut() else { return };
-            match s.publish_dm_relays(&shown) {
-                Ok(fx) => {
-                    let n = s.relays.len();
-                    st.slot_profile.dm_relays = s.relays.clone();
-                    if let Err(e) = st.store.save_profile(st.slot, &st.slot_profile) {
-                        log::warn!("storage: {e}");
-                    }
-                    apply(ui, st, fx);
-                    let app = ui.global::<App>();
-                    app.set_relay_note_error(false);
-                    app.set_relay_note(format!("Signed on Passport: {} sent to the phone to publish.", plural(n, "relay", "relays")).into());
-                }
-                Err(e) => {
-                    let app = ui.global::<App>();
-                    app.set_relay_note_error(true);
-                    app.set_relay_note(format!("Not published: {}", sentence(e)).into());
-                }
-            }
+            let fx = s.fetch_all_history();
+            apply(ui, st, fx);
+            toast(ui, "Asking the relays for every message. This can take a while.");
         })
     });
+
+    actions.on_set_show_profiles(|on| with_app(|ui, st| set_show_profiles(ui, st, on)));
 
     actions.on_retry_load(|| with_app(start));
 
@@ -2263,6 +2532,7 @@ fn app_main(cx: AppContext, ui: AppWindow) {
     actions.on_close_picture(|| {
         with_app(|ui, st| {
             st.viewer = None;
+            ANIM_TIMER.with(|t| t.stop());
             refresh_thread(ui, st);
             ui.global::<App>().set_page(PAGE_THREAD);
         })
