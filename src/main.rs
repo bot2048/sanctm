@@ -873,6 +873,7 @@ fn show_error(ui: &AppWindow, title: &str, body: &str, soft: bool) {
     app.set_error_body(body.into());
     app.set_error_soft(soft);
     app.set_error_retry(false);
+    app.set_error_seed(false);
     app.set_page(PAGE_ERROR);
     if !soft {
         device::feedback_err();
@@ -2135,11 +2136,36 @@ fn forget_picture(ui: &AppWindow, st: &mut State, msg: &str) {
 
 // ---- startup -------------------------------------------------------------------------------
 
-fn boot(ui: &AppWindow, fs: std::sync::Arc<FileSystem>) {
+/// Wait before asking for the app seed. KeyOS 1.4.1 drops a permission prompt raised while
+/// the window is still coming up, and counts it as a refusal.
+const SEED_FIRST_DELAY: Duration = Duration::from_millis(1500);
+/// A dropped prompt is not remembered, so asking again shows it. `Not Now` and `Never Allow`
+/// refuse at once, so the tries go quickly in that case.
+const SEED_TRIES: u32 = 3;
+const SEED_RETRY: Duration = Duration::from_secs(2);
+
+fn boot(ui: &AppWindow, fs: std::sync::Arc<FileSystem>, attempt: u32) {
     let seed = match device::app_seed() {
         Ok(seed) => seed,
-        Err(e) => {
-            show_error(ui, "Sanctm cannot start", &e, false);
+        Err(e) if attempt < SEED_TRIES => {
+            log::warn!("app seed try {attempt} of {SEED_TRIES} refused ({e}); asking again in {SEED_RETRY:?}");
+            ui.global::<App>().set_boot_text("Waiting for permission to use the app key…".into());
+            let weak = ui.as_weak();
+            Timer::single_shot(SEED_RETRY, move || {
+                if let Some(ui) = weak.upgrade() {
+                    boot(&ui, fs, attempt + 1);
+                }
+            });
+            return;
+        }
+        Err(_) => {
+            show_error(
+                ui,
+                "Sanctm cannot start",
+                "Your Nostr key is made from Sanctm's app key, and KeyOS did not let Sanctm use it. Close Sanctm, open it again and choose Always Allow. If you chose Never Allow, allow it under Settings > Apps > Sanctm, then tap Try again.",
+                false,
+            );
+            ui.global::<App>().set_error_seed(true);
             return;
         }
     };
@@ -2435,7 +2461,22 @@ fn app_main(cx: AppContext, ui: AppWindow) {
 
     actions.on_set_show_profiles(|on| with_app(|ui, st| set_show_profiles(ui, st, on)));
 
-    actions.on_retry_load(|| with_app(start));
+    let weak_seed = ui.as_weak();
+    let fs_seed = cx.fs.clone();
+    actions.on_retry_load(move || {
+        // The app key was refused, so nothing has loaded yet: ask KeyOS for it once more.
+        if APP.with(|a| a.borrow().is_none()) {
+            let (weak, fs) = (weak_seed.clone(), fs_seed.clone());
+            Timer::single_shot(Duration::ZERO, move || {
+                if let Some(ui) = weak.upgrade() {
+                    ui.global::<App>().set_page(PAGE_LOADING);
+                    boot(&ui, fs, SEED_TRIES);
+                }
+            });
+            return;
+        }
+        with_app(start)
+    });
 
     actions.on_go_home(|| {
         with_app(|ui, st| {
@@ -2503,12 +2544,13 @@ fn app_main(cx: AppContext, ui: AppWindow) {
         }
     });
 
-    // The app seed prompt needs a running event loop (SDK gotcha #24): boot from a timer.
+    // The app seed prompt needs a running event loop (SDK gotcha #24) and a window that is
+    // already up: boot from a timer.
     let weak = ui.as_weak();
     let fs = cx.fs.clone();
-    Timer::single_shot(Duration::from_millis(50), move || {
+    Timer::single_shot(SEED_FIRST_DELAY, move || {
         if let Some(ui) = weak.upgrade() {
-            boot(&ui, fs);
+            boot(&ui, fs, 1);
         }
     });
 

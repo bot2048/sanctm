@@ -333,6 +333,8 @@ export global App {
     in property <bool> error-soft: false;
     // The identity could not be loaded: offer to try again before starting over.
     in property <bool> error-retry: false;
+    // KeyOS refused the app key before anything loaded: "Try again" is the only button.
+    in property <bool> error-seed: false;
 
     // Transient one-line note (toast-like) on the chats page
     in property <string> toast: "";

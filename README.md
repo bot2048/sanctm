@@ -17,7 +17,8 @@ Built for the Bitmela hackathon on Foundation's KeyOS SDK 1.1.0 (KeyOS 1.4).
 </p>
 
 **Contents:** [Install on your Passport](#install-on-your-passport) ·
-[Try it on a computer](#try-it-on-a-computer-simulator-and-companion) · [Why](#why) ·
+[Try it on a computer](#try-it-on-a-computer-simulator-and-companion) ·
+[Using Sanctm, step by step](#using-sanctm-step-by-step) · [Why](#why) ·
 [Features](#features) · [What each side sees](#what-each-side-sees) ·
 [How it works](#how-it-works) · [The link, and QuantumLink](#the-link-and-quantumlink) ·
 [Tests](#tests) · [Layout](#layout) · [Limits](#limits-honest-list) ·
@@ -71,9 +72,10 @@ did not make. If you already allowed this publisher for
 appears in the launcher.
 
 **5. Set up your identity.** Open Sanctm. KeyOS asks once whether Sanctm may use its app key;
-allow it, because your Nostr key is derived from it. Then either create a new Nostr identity
-or choose "I already have a Nostr account" and scan your nsec's QR code with the Passport
-camera. Your npub and its QR code are under **Me**.
+choose **Always Allow**, because your Nostr key is derived from it. Then either tap
+**Create my Nostr account** or tap **I already have a Nostr key** and scan your nsec's QR code
+with the Passport camera. Your npub and its QR code are under **Me**.
+[Using Sanctm, step by step](#using-sanctm-step-by-step) goes through each screen.
 
 **Updating.** Download the newer `sanctm.app` and install it the same way. Your identity,
 contacts and chats are kept.
@@ -130,10 +132,10 @@ cd sanctm/companion && python3 -m http.server 8000
 # open http://localhost:8000   (or from a phone on the same Wi-Fi: http://<laptop-ip>:8000)
 ```
 
-It links to the app on `ws://<host>:9878` and uses 11 public relays by default
-(eden.nostr.land, nostr.bitcoiner.social, nostr.mom, nostr.walletofsatoshi.com,
-nostrelites.org, pyramid.fiatjaf.com, relay.damus.io, relay.mostr.pub, relay.primal.net,
-relay.snort.social, wot.nostr.party). Change either under Settings, or with
+It links to the app on `ws://<host>:9878` and uses 14 public relays by default
+(auth.nostr1.com, eden.nostr.land, nos.lol, nostr.bitcoiner.social, nostr.mom,
+nostr.walletofsatoshi.com, nostrelites.org, pyramid.fiatjaf.com, relay.0xchat.com,
+relay.damus.io, relay.mostr.pub, relay.primal.net, relay.snort.social, wot.nostr.party). Change either under Settings, or with
 `#ws=host:port&relays=wss://a,wss://b`. The page must be served over http (`file://` is refused).
 
 **3. Someone to talk to.** Any NIP-17 app on the same relays: 0xchat, Amethyst, Coracle,
@@ -155,6 +157,122 @@ With Developer Mode on (Settings > Apps > Developer Mode), `foundation cert inst
 belongs to the maintainer, and its private key is not published. A Passport treats an app
 signed by a different publisher as a different app, so your build will not install over the
 released `sanctm.app`.
+
+## Using Sanctm, step by step
+
+This takes you from the first launch to a conversation. The names in bold are the words on
+the Passport's screen. In the simulator you tap with the mouse and type with the computer's
+keyboard.
+
+### 1. First launch: allow the app key
+
+Open Sanctm from the launcher. It shows its logo and "Unlocking your Nostr key…". After a
+moment KeyOS shows a popup asking whether Sanctm may use its app key, a secret that KeyOS
+makes for each app from your Passport's seed. Your Nostr key is made from it, so Sanctm
+cannot work without it. Choose **Always Allow**. KeyOS remembers the answer and does not ask
+again.
+
+The popup has two other buttons:
+
+* **Not Now** refuses until Sanctm is closed. Sanctm asks again a few times and then shows
+  "Sanctm cannot start". Close Sanctm, open it again and choose **Always Allow**.
+* **Never Allow** is remembered. To change it, open **Settings > Apps > Sanctm** and allow
+  the app key, then go back to Sanctm and tap **Try again**.
+
+In the simulator, if the app key is refused, Sanctm uses a fixed test key and says so on its
+first screen.
+
+### 2. Create or import your identity
+
+The first screen explains how Sanctm works and has two buttons:
+
+* **Create my Nostr account** makes a new Nostr key from this Passport's seed. There is
+  nothing new to write down: if you restore the Passport from its seed words, the same npub
+  comes back.
+* **I already have a Nostr key** opens "Use my Nostr account". Tap **Scan nsec QR** and hold
+  the QR code of your nsec in front of the Passport camera, or type the key into the field
+  (`nsec1…` or 64 hex characters) and tap **Import and seal it**. The key is sealed on the
+  Passport and never shown again. Keep in mind that a key you used in other apps can be read
+  on those devices too.
+
+Either way you land on **Chats**, which says "No chats yet". You can hold up to 10 accounts:
+**Me > Accounts > Create a new Passport key** or **Use an existing nsec**. Each account has its
+own contacts and chats.
+
+### 3. Find your npub and its QR code
+
+Tap **Show my npub** on the empty Chats screen, or the person icon (your photo, once you have
+a profile) at the top right of Chats. This opens **Me**. Under "Your npub" is a QR code and
+the npub written out in short groups. A friend scans the QR code with their Nostr app to
+write to you. A short form of your npub is always shown under "Sanctm" at the top of Chats.
+
+### 4. Add a contact
+
+Tap **Write to someone** on the empty Chats screen, or the pencil button at the top of
+Chats. The **New chat** screen opens.
+
+1. Tap **Scan their npub QR** and point the camera at their npub QR code, or type into
+   "Their npub or name@domain". It takes an npub, an nprofile, a 64-character hex key or a
+   Nostr address such as `alice@example.com`. For an address, tap **Look up** first; the
+   companion looks it up, so this needs a linked companion.
+2. Type a name under "Your name for them (optional)". With a name, the person is saved as a
+   contact. The name stays on your Passport and they never see it.
+3. Tap **Start chat**.
+
+You can also scan someone's npub QR from the KeyOS Launcher and choose "Message on Nostr".
+Sanctm opens with that npub already filled in.
+
+When someone you have not saved writes to you, their chat says "Not in your contacts". Tap
+**Add contact**, type "Your name for them" and tap **Save contact**. Before you trust a name,
+compare the npub under "Check their npub" with the one their own app shows, on a call or in
+person.
+
+### 5. Write a message
+
+Open a chat from Chats, type in the "Message…" box at the bottom and tap the arrow button
+next to it. Under your message Sanctm shows where it is:
+
+| Status | Meaning |
+|---|---|
+| queued on Passport | Sealed and waiting for a link to the companion. |
+| sending… | Handed to the companion, waiting for relays to accept it. |
+| on 3 relays | Accepted by that many relays. |
+| not sent (reason) | While linked, tap it and then **Send again now**. Otherwise it goes out on the next link. |
+
+Tap any message to react to it or reply to it.
+
+On a real Passport today every message stays "queued on Passport". KeyOS 1.4 gives
+third-party apps no way to exchange data with a phone or computer (see
+[The link, and QuantumLink](#the-link-and-quantumlink)). Sanctm will send the queued messages
+once KeyOS 1.5 opens QuantumLink (QLv2) to apps. Until then, use the simulator to chat with
+real people, as below.
+
+### 6. Chat from a computer
+
+This uses Sanctm in the simulator, with the companion page as the "phone", and someone on
+another NIP-17 app such as 0xchat or Amethyst. The simulator has its own seed, so a new
+account there has a different npub from the one on your Passport.
+
+1. Start the simulator and the companion page as in
+   [Try it on a computer](#try-it-on-a-computer-simulator-and-companion), steps 1 and 2.
+   The page shows **Passport linked**. In Sanctm, **Me > Phone link** shows "Syncing" and
+   then "Phone linked".
+2. In the simulator, follow steps 1 and 2 above to set up an identity. Once linked, Sanctm
+   publishes your DM inbox relays by itself (they are listed under **Me > DM inbox relays**),
+   so other apps know where to deliver your messages.
+3. Share your npub. Your friend scans the QR code on the simulator's **Me** screen, or the one
+   behind **Show QR** on the companion page, with their app. **Copy npub** on the companion
+   page copies it so you can send it some other way.
+4. Get their npub from their app (it is on their profile). In Sanctm tap the pencil button,
+   click the "Their npub or name@domain" field, paste it with Ctrl+V, type a name and tap
+   **Start chat**.
+5. Write to them. The status changes from "sending…" to "on N relays", and their replies
+   appear in the chat. The companion page's ACTIVITY list shows each gift wrap by size only.
+
+If their messages do not arrive, check that their app sends private messages with NIP-17.
+Sanctm reads only NIP-17; older NIP-04 direct messages do not show. **Me > Fetch all messages
+again** asks the relays for every message from the start, which also brings in chats you had
+with this key in other apps.
 
 ## Why
 
@@ -180,7 +298,7 @@ screen. The internet-facing device becomes a dumb courier.
   Sanctm or writes a PNG copy to Passport storage, the Airlock or a USB drive, in a folder you
   pick (or straight to the folder you used last).
 * **Relays done right.** Your DM inbox relays (kind 10050) and relay logins (NIP-42) are signed
-  on the Passport, logins only for your own relays. 11 well-known relays by default.
+  on the Passport, logins only for your own relays. 14 well-known relays by default.
 * **Made for Passport.** Nostr purple theme that follows KeyOS light and dark, the Passport
   keyboard's Next and Done, a buzz and purple LED for new messages, and scanning someone's npub
   from the Launcher opens a chat with them.
@@ -204,7 +322,7 @@ up: restore the Passport and the same npub comes back. An existing `nsec` can be
 instead (scan its QR); it is then kept sealed under the app seed.
 
 **Your existing account.** Already on Nostr? On the Passport, choose "I already have a
-Nostr account" (first screen) or Me → Accounts → "Use an existing nsec", then scan your nsec's
+Nostr key" (first screen) or Me → Accounts → "Use an existing nsec", then scan your nsec's
 QR with the Passport camera or type it (`nsec1…` or 64 hex). The key is sealed under the app
 seed and never shown again; the phone never sees it. Your npub, followers and NIP-17 history
 come with it: past DMs arrive as the companion syncs. Each account keeps its own sealed
@@ -330,7 +448,7 @@ docs/                 FEATURES.md (compared with other Nostr DM apps), DESIGN.md
   back an older copy (it still has to be a genuine one from this Passport).
 * Hardware: installs and runs on any Passport, but there is no link to the companion until
   QLv2 (KeyOS 1.5), so messages queue on the device.
-* "Publish as my DM relays" lists every relay the companion uses (11 by default); NIP-17
+* "Publish as my DM relays" lists every relay the companion uses (14 by default); NIP-17
   suggests a few that accept gift wraps. Edit the list under the companion's Settings first.
 * Saving a copy asks KeyOS for access once per place. The Airlock cannot be written while a
   computer is connected over USB, and USB drives may not be open to third-party apps yet.

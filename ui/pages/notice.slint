@@ -39,13 +39,13 @@ export component ErrorPage inherits Rectangle {
         spacing: S.s4;
         // A profile that did not load may be a passing read error: retry before anything
         // offers to start over.
-        if App.error-retry: Btn {
+        if App.error-retry || App.error-seed: Btn {
             text: "Try again";
             clicked => {
                 Actions.retry-load();
             }
         }
-        Btn {
+        if !App.error-seed: Btn {
             text: App.error-retry ? "Start over" : "OK";
             kind: App.error-retry ? 1 : 0;
             clicked => {
