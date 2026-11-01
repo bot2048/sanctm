@@ -16,9 +16,11 @@ Built for the Bitmela hackathon on Foundation's KeyOS SDK 1.1.0 (KeyOS 1.4).
   <img src="docs/screenshots/chats-light.png" width="160" alt="Chats in the light theme">
 </p>
 
-**Contents:** [Why](#why) · [Features](#features) · [What each side sees](#what-each-side-sees) ·
+**Contents:** [Install on your Passport](#install-on-your-passport) ·
+[Try it on a computer](#try-it-on-a-computer-simulator-and-companion) · [Why](#why) ·
+[Features](#features) · [What each side sees](#what-each-side-sees) ·
 [How it works](#how-it-works) · [The link, and QuantumLink](#the-link-and-quantumlink) ·
-[Run it](#run-it) · [Tests](#tests) · [Layout](#layout) · [Limits](#limits-honest-list) ·
+[Tests](#tests) · [Layout](#layout) · [Limits](#limits-honest-list) ·
 [Future scope](#future-scope) · [License](#license)
 
 ```
@@ -31,6 +33,127 @@ Built for the Bitmela hackathon on Foundation's KeyOS SDK 1.1.0 (KeyOS 1.4).
  └───────────────────────────────┘        └──────────────────────────┘
    link = QuantumLink on hardware (KeyOS 1.5 / QLv2), a WebSocket in the simulator today
 ```
+
+## Install on your Passport
+
+This works on any Passport Prime running KeyOS 1.4.0 or newer (the version is shown under
+**Settings > About**). You need a computer and a USB-C cable. You do not need to build
+anything.
+
+**1. Download these two files** from the
+[latest release](https://github.com/bot2048/sanctm/releases/latest):
+
+| File | What it is |
+|---|---|
+| `sanctm.app` | the app |
+| `arpan-jain.crt` | the publisher certificate, which tells your Passport who made the app |
+
+**2. Copy them to the Passport.** Connect the Passport to your computer with the USB-C cable
+and set the Airlock to **Read/Write** on the Passport. The Airlock then shows up on your
+computer as a USB drive. Copy both files to the top level of that drive, eject the drive, and
+unplug the cable. A USB stick plugged into the Passport also works.
+
+**3. Allow the publisher (once).** On the Passport, open
+**Settings > Apps > Allowed Publishers > Add Publisher** and pick `arpan-jain.crt`. Check that
+the fingerprint on screen is exactly
+
+```text
+85a3e6b06f8c4b4f8e27ee5bea8af8311e38bfd0cd55f61b6ab5997eb1651908
+```
+
+(short form `85a3e6b0…b1651908`), then tap **Allow this Publisher**. KeyOS warns that
+Foundation has not verified this publisher. It shows that warning for every app Foundation
+did not make. If you already allowed this publisher for
+[DOOM](https://github.com/bot2048/doom-game), skip this step.
+
+**4. Install the app.** Open **Settings > Apps > Install App** and pick `sanctm.app`. Sanctm
+appears in the launcher.
+
+**5. Set up your identity.** Open Sanctm. KeyOS asks once whether Sanctm may use its app key;
+allow it, because your Nostr key is derived from it. Then either create a new Nostr identity
+or choose "I already have a Nostr account" and scan your nsec's QR code with the Passport
+camera. Your npub and its QR code are under **Me**.
+
+**Updating.** Download the newer `sanctm.app` and install it the same way. Your identity,
+contacts and chats are kept.
+
+### What works on a real Passport today
+
+Sanctm talks to Nostr relays through a companion: a web page on your phone or computer that
+carries encrypted messages between the Passport and the relays. On a real Passport the
+companion cannot connect yet. KeyOS 1.4 gives third-party apps no way to exchange data with a
+phone or computer; Foundation is opening QuantumLink to apps in KeyOS 1.5, and Sanctm will
+use it then (see [The link, and QuantumLink](#the-link-and-quantumlink)).
+
+Until then, on the device you can:
+
+* create or import identities (up to 10 accounts) and show your npub as a QR code;
+* add contacts, including by scanning someone's npub from the Launcher;
+* write messages, which are encrypted on the Passport and queued until a link exists;
+* read your saved chats and kept pictures.
+
+Sending and receiving work today in the simulator on a computer, linked to the companion page.
+The next section shows how.
+
+## Try it on a computer (simulator and companion)
+
+This runs the full app, sending and receiving real Nostr messages, in Foundation's Passport
+simulator on a Linux computer (tested on Ubuntu). You need two terminal windows.
+
+**0. Set up (once).** On a computer with nothing installed:
+
+```sh
+git clone https://github.com/bot2048/sanctm.git && cd sanctm
+./setup.sh
+```
+
+`setup.sh` installs everything (curl and git, Nix, the Foundation SDK 1.1.0 and its toolchain,
+the Passport USB rules, Node.js) and runs the protocol tests. It asks for your password
+(sudo), needs internet and about 25 GB of free disk, and is safe to run again. Open a new
+terminal afterwards. If you already have the Foundation SDK 1.1.0 (`foundation doctor` is
+clean), skip this step. The SDK's Rust toolchain is only on the path inside
+`foundation develop`.
+
+**1. The app in the simulator**, in the first terminal:
+
+```sh
+cd sanctm
+foundation develop                     # a shell with the SDK toolchain
+foundation sim                         # builds (first time: 5-15 min) and opens KeyOS with Sanctm
+```
+
+**2. The companion page (the "phone")**, in a second terminal:
+
+```sh
+cd sanctm/companion && python3 -m http.server 8000
+# open http://localhost:8000   (or from a phone on the same Wi-Fi: http://<laptop-ip>:8000)
+```
+
+It links to the app on `ws://<host>:9878` and uses 11 public relays by default
+(eden.nostr.land, nostr.bitcoiner.social, nostr.mom, nostr.walletofsatoshi.com,
+nostrelites.org, pyramid.fiatjaf.com, relay.damus.io, relay.mostr.pub, relay.primal.net,
+relay.snort.social, wot.nostr.party). Change either under Settings, or with
+`#ws=host:port&relays=wss://a,wss://b`. The page must be served over http (`file://` is refused).
+
+**3. Someone to talk to.** Any NIP-17 app on the same relays: 0xchat, Amethyst, Coracle,
+Flotilla, Nostur. Send a DM to the npub shown on the Passport (Me) and on the companion page.
+Or use a second account on the same Passport (Me → Accounts → Create a new Passport key) and
+message one account from the other.
+
+**Accounts.** One Passport holds up to 10 Nostr accounts (Me → Accounts): keys derived from
+its seed (NIP-06 accounts 0, 1, 2…) and imported nsecs, each with its own sealed chats,
+contacts and profiles.
+
+**Building for a Passport yourself.** Inside `foundation develop`, create your own publisher
+signing identity with `foundation cert gen <name>`, put its name in `app-config.toml`
+(`signing-identity`) and your details in `[publisher]`, then run `foundation pack --release`.
+It writes `target/keyos/nip-ping.app`, which installs from **Settings > Apps > Install App**
+after you allow your certificate as in [Install on your Passport](#install-on-your-passport).
+With Developer Mode on (Settings > Apps > Developer Mode), `foundation cert install <name>` and
+`foundation sideload --release` do the same over USB. The identity named in this repository
+belongs to the maintainer, and its private key is not published. A Passport treats an app
+signed by a different publisher as a different app, so your build will not install over the
+released `sanctm.app`.
 
 ## Why
 
@@ -158,47 +281,6 @@ So the transport is a seam (`src/transport.rs`):
   frames (`core/src/link.rs`) and everything above them stay the same, and the companion's
   logic moves into the phone side of QuantumLink.
 
-## Run it
-
-Needs the Foundation SDK 1.1.0 (`foundation doctor` clean). Its Rust toolchain is only on the
-path inside `foundation develop`. On a fresh Ubuntu, `./setup.sh` installs everything (Nix, the
-SDK and its toolchain, Node.js) and runs the protocol tests; open a new terminal afterwards.
-
-**1. The app in the simulator**
-
-```sh
-git clone <this repo> sanctm && cd sanctm
-foundation develop                     # a shell with the SDK toolchain
-foundation sim                         # builds (first time: 5-15 min) and opens KeyOS with Sanctm
-```
-
-**2. The companion page (the "phone")**, in a second terminal:
-
-```sh
-cd companion && python3 -m http.server 8000
-# open http://localhost:8000   (or from a phone on the same Wi-Fi: http://<laptop-ip>:8000)
-```
-
-It links to the app on `ws://<host>:9878` and uses 11 public relays by default
-(eden.nostr.land, nostr.bitcoiner.social, nostr.mom, nostr.walletofsatoshi.com,
-nostrelites.org, pyramid.fiatjaf.com, relay.damus.io, relay.mostr.pub, relay.primal.net,
-relay.snort.social, wot.nostr.party). Change either under Settings, or with
-`#ws=host:port&relays=wss://a,wss://b`. The page must be served over http (`file://` is refused).
-
-**3. Someone to talk to.** Any NIP-17 app on the same relays: 0xchat, Amethyst, Coracle,
-Flotilla, Nostur. Send a DM to the npub shown on the Passport (Me) and on the companion page.
-Or use a second account on the same Passport (Me → Accounts → Create a new Passport key) and
-message one account from the other.
-
-**Accounts.** One Passport holds up to 10 Nostr accounts (Me → Accounts): keys derived from
-its seed (NIP-06 accounts 0, 1, 2…) and imported nsecs, each with its own sealed chats,
-contacts and profiles.
-
-**Hardware.** `foundation build --release` builds and signs for a real Passport Prime
-(`foundation cert gen` once). KeyOS 1.4 does not yet let third-party apps send data over
-QuantumLink, so on hardware the app works offline: identity, npub QR, nsec import by camera,
-writing (messages queue sealed), saved chats.
-
 ## Tests
 
 `cd core && cargo test --release` (inside `foundation develop`, or with any recent Rust): the
@@ -245,7 +327,8 @@ docs/                 FEATURES.md (compared with other Nostr DM apps), DESIGN.md
   (`file://` is refused).
 * A sealed file has no version counter: someone with write access to the storage could put
   back an older copy (it still has to be a genuine one from this Passport).
-* Hardware: builds for the device, but there is no app link until QLv2.
+* Hardware: installs and runs on any Passport, but there is no link to the companion until
+  QLv2 (KeyOS 1.5), so messages queue on the device.
 * "Publish as my DM relays" lists every relay the companion uses (11 by default); NIP-17
   suggests a few that accept gift wraps. Edit the list under the companion's Settings first.
 * Saving a copy asks KeyOS for access once per place. The Airlock cannot be written while a
