@@ -40,8 +40,9 @@ This works on any Passport Prime running KeyOS 1.4.0 or newer (the version is sh
 **Settings > About**). You need a computer and a USB-C cable. You do not need to build
 anything.
 
-**1. Download these two files** from the
-[latest release](https://github.com/bot2048/sanctm/releases/latest):
+**1. Download the zip file** (for example `sanctm-0.1.0.zip`) from the
+[latest release](https://github.com/bot2048/sanctm/releases/latest) and unzip it. It holds
+these two files:
 
 | File | What it is |
 |---|---|
